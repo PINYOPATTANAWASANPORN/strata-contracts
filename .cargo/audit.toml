@@ -1,0 +1,44 @@
+# Configuration for `cargo audit`, read both locally and by the CI
+# `dependency audit` job.
+#
+# The location matters: cargo-audit reads `.cargo/audit.toml` from the project
+# root (or `~/.cargo/audit.toml`). A file named `audit.toml` at the repository
+# root is silently ignored, which looks exactly like an entry that did not work.
+#
+# An entry in `ignore` is a recorded decision, not a suppression. Each one names
+# the advisory, says why it does not apply here, and says what would remove it.
+# Nothing is ignored because it is inconvenient: a new advisory fails the check,
+# and because the `protect-main` ruleset requires the `dependency audit` check,
+# that failure blocks a pull request.
+
+[advisories]
+# One ID. Add nothing here without the same treatment: what it is, why it does
+# not reach the deployed code, and what would remove it.
+# RUSTSEC-2026-0387 — crypto-bigint 0.5.5
+# "Multiple timing variability issues in operations intended to be constant-time"
+# Published 2026-10-23.
+#
+# How it is reached, and only this way:
+#
+#   soroban-sdk 27.0.6 -> soroban-env-host 27.0.1 -> k256 0.13.4
+#                      -> ecdsa 0.16.9 -> elliptic-curve 0.13.8
+#                      -> crypto-bigint 0.5.5
+#
+# It is not in what this repository deploys. `cargo tree -i crypto-bigint
+# --target wasm32v1-none` prints nothing, so neither `strata_epoch_manager.wasm`
+# nor `strata_mock_vault.wasm` contains the crate; it is part of the host
+# implementation that the SDK's test support uses. No contract here calls the
+# secp256k1 host functions that crate backs, so there is no signature path in
+# this repository that exercises it with either a secret key or a borrower's
+# data.
+#
+# The advisory's fix is crypto-bigint >= 0.7.6, which requires a newer
+# elliptic-curve and therefore a soroban-sdk release: 27.0.6 is the newest 27.x
+# on crates.io, and this workspace pins soroban-sdk in one place on purpose
+# (docs/risks.md R16). Nothing here depends on crypto-bigint directly, so there
+# is no version to raise.
+#
+# Remove this entry when the workspace moves to an SDK whose k256 no longer
+# pulls crypto-bigint 0.5.x. Check that with the `cargo tree` command above
+# before removing it, rather than assuming the bump fixed it.
+ignore = ["RUSTSEC-2026-0387"]

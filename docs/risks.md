@@ -232,9 +232,24 @@ settled real epochs. Note that the CLI ships `stellar-xdr` 28.0.0 against an SDK
 27 workspace — that pairing was verified empirically rather than assumed, and a
 future CLI bump could break it silently.
 
-*Open:* `cargo audit` runs in CI but is `continue-on-error: true`, so it reports
-without blocking. No dependency review. Nothing checks that the CLI version used
-to build is compatible with the SDK version pinned here.
+*Open:* no dependency review. Nothing checks that the CLI version used to build
+is compatible with the SDK version pinned here.
+
+*Audit, as it actually behaves:* the `dependency audit` job carries
+`continue-on-error: true`, which keeps the *workflow* green, but the
+`protect-main` ruleset requires that check by name, so a failing audit run does
+block a pull request. Exactly one advisory is ignored, by ID, in
+[`.cargo/audit.toml`](../.cargo/audit.toml), where the reasoning and the removal
+condition are recorded:
+
+- **RUSTSEC-2026-0387** — `crypto-bigint` 0.5.5, timing variability in
+  operations intended to be constant-time, published 2026-10-23. Reached only
+  through `soroban-env-host` → `k256`; `cargo tree -i crypto-bigint --target
+  wasm32v1-none` finds nothing, so it is in neither deployed Wasm, and no
+  contract here calls the secp256k1 host functions it backs. The fix needs
+  `crypto-bigint >= 0.7.6`, which can only arrive through a `soroban-sdk`
+  release, and 27.0.6 is the newest 27.x. Removing the ignore is part of the SDK
+  bump this entry already says must be its own commit.
 
 ### R17 — Mainnet guardrail — **Low, closed**
 
