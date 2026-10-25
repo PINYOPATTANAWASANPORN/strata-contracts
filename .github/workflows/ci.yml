@@ -184,10 +184,15 @@ jobs:
   audit:
     name: dependency audit
     runs-on: ubuntu-latest
-    # Informational for now: this is an unaudited testnet project, and an audit
-    # failure should not be able to block unrelated work. Flip to `required`
-    # once the dependency set has settled, and see the supply-chain entry in
-    # docs/risks.md.
+    # `continue-on-error` keeps the workflow run green, but it does not make the
+    # check green: a failing job still reports a failed check run, and the
+    # `protect-main` ruleset requires this check by name (`dependency audit`) on
+    # every pull request. So in practice a failing audit **does** block a merge,
+    # and this job has to genuinely pass.
+    #
+    # One advisory is ignored, deliberately and by ID, in `.cargo/audit.toml`,
+    # with the reasoning and the removal condition recorded there. A new
+    # advisory is not ignored and will fail this job.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
