@@ -1,0 +1,25 @@
+[package]
+name = "strata-blend-pool-interface"
+description = "The subset of a Blend lending pool's interface a Strata Blend adapter depends on."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# An rlib, not a cdylib: this crate contains no logic, only the request and
+# reserve types, the interface trait, and the generated `BlendPoolClient` that
+# the adapter links against. Same shape as `vault-interface`, and for the same
+# reason: it is what lets the adapter depend on a pool *interface* rather than
+# on one particular pool, so the test double and the real testnet pool are
+# interchangeable.
+[lib]
+crate-type = ["rlib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }

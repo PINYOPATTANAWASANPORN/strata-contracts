@@ -2,6 +2,14 @@
 
 **Status:** research only. No contract code was written for this note.
 **Date:** 2026-10-25.
+
+The design below was built on 2026-10-27 as `contracts/blend-adapter`, with
+`contracts/blend-pool-interface` for the pool ABI subset and
+`contracts/blend-pool-mock` as the test double. That work is tested against the
+double only: the adapter has not been deployed, has never run against a real
+pool, and the TTL finding in §4.7 is still unaddressed. Everything measured in
+§5 and every risk in §8 stands as written. See [`risks.md`](../risks.md) B1–B7
+for where each one stands now.
 **Scope:** can Strata's epoch manager run against a real Stellar yield source on
 testnet — a Blend lending pool — through an adapter that implements the existing
 `vault-interface` unchanged?

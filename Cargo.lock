@@ -1952,6 +1952,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "strata-blend-adapter"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+ "strata-blend-pool-interface",
+ "strata-blend-pool-mock",
+ "strata-vault-interface",
+]
+
+[[package]]
+name = "strata-blend-pool-interface"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+]
+
+[[package]]
+name = "strata-blend-pool-mock"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+ "strata-blend-pool-interface",
+]
+
+[[package]]
 name = "strata-epoch-manager"
 version = "0.1.0"
 dependencies = [

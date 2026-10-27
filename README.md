@@ -42,7 +42,12 @@ crate with no `soroban-sdk` dependency at all, which is what makes it cheap to
 property-test and impossible to disagree with the contract.
 
 **It is not a yield product.** The vault it wraps is a mock whose yield an admin
-sets by hand. There is no real yield source integrated.
+sets by hand. There is no real yield source integrated. A second vault —
+[`contracts/blend-adapter`](contracts/blend-adapter), which supplies to a real
+Blend lending pool — is built and tested against a pool test double, but it has
+not been deployed and has never been run against a real pool, so the sentence
+above still describes everything that runs today. See
+[risks.md](docs/risks.md) B1–B7.
 
 ## Architecture
 
@@ -127,6 +132,7 @@ above were run against this tree.
 stellar contract build
 # -> target/wasm32v1-none/release/strata_epoch_manager.wasm   (25964 bytes)
 # -> target/wasm32v1-none/release/strata_mock_vault.wasm     ( 9638 bytes)
+# -> target/wasm32v1-none/release/strata_blend_adapter.wasm  (size not recorded)
 ```
 
 `cargo build` does **not** produce a deployable contract. The Soroban runtime only
@@ -198,6 +204,9 @@ Marked **Done** only where the work was actually run and checked.
 | `contracts/vault-interface` | **Done** | The ERC-4626 subset, plus `asset` and `balance_of`. No tests of its own. |
 | `contracts/mock-vault` | **Done** | Test double, admin-set signed yield. 21 tests. |
 | `contracts/epoch-manager` | **Done** | Epoch lifecycle, deposits, settlement, claims. 18 tests. |
+| `contracts/blend-pool-interface` | **Done** | The Blend pool subset the adapter calls. Shapes read from Blend's source; not yet checked against a deployed pool. |
+| `contracts/blend-pool-mock` | **Done** | Pool test double. 12 tests. Never deployed. |
+| `contracts/blend-adapter` | **In progress** | Core built, Wasm builds, 23 tests against the double. **Not deployed, never run against a real pool.** TTL refresh and the testnet deployment are not done. |
 | Cross-contract tests | **Done** | 30 tests over manager + vault + a real token. |
 | CI | **Done** | fmt, clippy, test, wasm build, spec consistency, audit. |
 | Testnet deployment | **Done** | Two epochs settled and checked against the spec. |
@@ -212,7 +221,7 @@ Nothing in this table is placeholder code presented as finished. "Planned" and
 
 ### Tests
 
-**104 tests, all passing.** Counted by `cargo test --all --locked`, one `#[test]`
+**139 tests, all passing.** Counted by `cargo test --all --locked`, one `#[test]`
 per case:
 
 | Where | Tests | What it proves |
@@ -222,7 +231,9 @@ per case:
 | `contracts/epoch-manager/src/test.rs` | 18 | lifecycle transitions, bounds, who may do what |
 | `tests/src/waterfall_props.rs` | 16 | all five spec invariants as properties |
 | `tests/src/integration.rs` | 30 | a real manager, vault and SEP-41 token, end to end |
-| `contracts/vault-interface` | 0 | a trait declaration, nothing to test |
+| `contracts/blend-pool-mock/src/test.rs` | 12 | the pool double rounds, clamps, gates and expires the way Blend does |
+| `contracts/blend-adapter/src/test.rs` | 23 | every adapter function and error, against that double, plus the deposit auth tree |
+| `contracts/vault-interface`, `contracts/blend-pool-interface` | 0 | trait declarations, nothing to test |
 
 Every settlement assertion in the integration tests is checked against
 `strata_waterfall::settle` computed independently, so the contract's numbers are
