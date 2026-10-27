@@ -11,6 +11,8 @@
 //!   and share ledger, against the pool double.
 //! - [`integration`] — cross-contract tests that drive epoch-manager, mock-vault
 //!   and a real SEP-41 token through full epoch lifecycles.
+//! - [`blend_adapter_integration`] — the same for an epoch-manager whose vault
+//!   is the Blend adapter rather than the mock vault.
 
 #![cfg(test)]
 
@@ -20,3 +22,6 @@ pub mod waterfall_props;
 pub mod integration;
 
 pub mod blend_adapter_props;
+
+#[cfg(test)]
+pub mod blend_adapter_integration;
