@@ -44,10 +44,11 @@ property-test and impossible to disagree with the contract.
 **It is not a yield product.** The vault it wraps is a mock whose yield an admin
 sets by hand. There is no real yield source integrated. A second vault —
 [`contracts/blend-adapter`](contracts/blend-adapter), which supplies to a real
-Blend lending pool — is built and tested against a pool test double, but it has
-not been deployed and has never been run against a real pool, so the sentence
-above still describes everything that runs today. See
-[risks.md](docs/risks.md) B1–B7.
+Blend lending pool — is built and tested against a pool test double, including
+full epochs driven by the real epoch manager through good, flat, loss and
+liquidity-limited settlements. It has not been deployed and has never been run
+against a real pool, so the sentence above still describes everything that runs
+today. See [risks.md](docs/risks.md) B1–B7.
 
 ## Architecture
 

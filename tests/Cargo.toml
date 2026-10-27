@@ -20,3 +20,5 @@ proptest = { workspace = true }
 strata-epoch-manager = { workspace = true, features = ["testutils"] }
 strata-mock-vault = { workspace = true, features = ["testutils"] }
 strata-vault-interface = { workspace = true }
+strata-blend-adapter = { workspace = true, features = ["testutils"] }
+strata-blend-pool-mock = { workspace = true, features = ["testutils"] }

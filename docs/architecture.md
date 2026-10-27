@@ -363,13 +363,16 @@ B4 in [risks.md](risks.md).
 | State machine | `contracts/epoch-manager/src/test.rs` | Lifecycle transitions, bounds, and who is allowed to do what. |
 | Pool model | `contracts/blend-pool-mock/src/test.rs` | The pool double is faithful where the adapter depends on it: rounding, the silent clamp, the utilisation gate, the empty read of an expired position. |
 | Blend adapter | `contracts/blend-adapter/src/test.rs` | Every adapter function and every error, against that double, plus the auth tree for a deposit. |
-| Whole system | `tests/src/integration.rs` | A real manager, vault and token, end to end. |
+| Adapter accounting | `tests/src/blend_adapter_props.rs` | Rounding cannot create value at a deposit or a redemption, a deposit/redeem round trip is bounded by principal plus accrued yield, and the share ledger moves only by the amounts calls report. |
+| Whole system | `tests/src/integration.rs` | A real manager, mock vault and token, end to end. |
+| Whole system, Blend | `tests/src/blend_adapter_integration.rs` | A real manager and real adapter through good, flat, loss and liquidity-limited epochs, with payouts recomputed from the spec. |
 
 The split is deliberate: the arithmetic is proved by property tests, the wiring
 is proved by integration tests, and neither is asked to do the other's job.
-Every settlement assertion in the integration tests is checked against
-`strata_waterfall::settle` computed independently, so the contract's numbers
-are never taken on trust.
+Every settlement assertion in the integration tests is checked against an
+independently computed value — `strata_waterfall::settle` for the mock-vault
+suite, and a direct transcription of spec §4–§5 for the Blend suite. In neither
+suite is the contract's own figure used as its expected value.
 
 ## Extending this
 
