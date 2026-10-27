@@ -155,7 +155,11 @@ out to borrowers who have not repaid. `settle` is permissionless, so anyone can
 retry, but retrying does not create liquidity.
 
 *Open:* there is no partial settlement and no timeout. A pool that stays fully
-utilised means funds wait.
+utilised means funds wait. The manager-level failure and retry are exercised
+end to end against the pool double
+(`a_liquidity_limited_redeem_blocks_settlement_and_can_be_retried`), so the
+state machine's half is known; whether a real pool has the liquidity remains
+unknown.
 
 ### B3 — A silent partial withdrawal — **Medium, mitigation built, untested against the real pool**
 
@@ -172,7 +176,10 @@ clamp. The double's clamp itself is tested in `blend-pool-mock`.
 
 *Open:* the check has never been exercised against Blend's real behaviour on a
 network. A clamp that lands on exactly the computed amount would still be
-indistinguishable from success.
+indistinguishable from success. The property tests in
+`tests/src/blend_adapter_props.rs` pin the adapter's side of the arithmetic
+against the faithful double — neither a deposit nor a redemption creates value
+through rounding — but they cannot test the real clamp.
 
 ### B4 — The Blend position can expire — **High, open**
 
@@ -204,7 +211,9 @@ position after every call rather than tracking a running total.
 
 *Open:* with one adapter position per epoch and no per-depositor shares at the
 pool, the dust is donated to whoever deposits next. That is a fairness wart, not
-a leak, and it is not measured on a real pool.
+a leak, and it is not measured on a real pool. Property tests now pin the two
+bounds that keep it a wart: a deposit cannot add more value than it paid, and a
+redemption cannot leave more value behind than it started with.
 
 ### B6 — A second asset to trust — **Medium, mitigation built**
 
