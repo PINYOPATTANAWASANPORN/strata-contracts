@@ -1,0 +1,30 @@
+[package]
+name = "strata-blend-pool-mock"
+description = "A test-only stand-in for a Blend v2 lending pool, with settable exchange rate and liquidity."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# An rlib only, never a cdylib: this crate is a test double that is registered
+# natively by tests, and it is never deployed to any network. There is no
+# `stellar contract build` artefact for it on purpose, so it cannot be mistaken
+# for something that belongs on chain.
+[lib]
+crate-type = ["rlib"]
+doctest = false
+
+[features]
+# Required by the integration tests in `tests/`, which register this contract
+# with `env.register`. Empty on purpose: it only flips on soroban-sdk/testutils.
+testutils = []
+
+[dependencies]
+soroban-sdk = { workspace = true }
+strata-blend-pool-interface = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+strata-blend-pool-interface = { workspace = true }

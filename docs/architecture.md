@@ -10,11 +10,14 @@ it.
 ```text
 strata-contracts
 ├── contracts/
-│   ├── waterfall          pure settlement math. no Env, no storage, no SDK.
-│   ├── vault-interface    the ERC-4626 subset Strata needs + generated client
-│   ├── epoch-manager      the contract. owns money and the state machine.
-│   └── mock-vault         test double with an admin-set signed yield rate
-└── tests/                 property tests + cross-contract integration tests
+│   ├── waterfall              pure settlement math. no Env, no storage, no SDK.
+│   ├── vault-interface        the ERC-4626 subset Strata needs + generated client
+│   ├── epoch-manager          the contract. owns money and the state machine.
+│   ├── mock-vault             test double with an admin-set signed yield rate
+│   ├── blend-pool-interface   the Blend pool subset the adapter calls
+│   ├── blend-adapter          vault-interface over a real Blend lending pool
+│   └── blend-pool-mock        test double for a Blend pool. never deployed.
+└── tests/                     property tests + cross-contract integration tests
 ```
 
 The dependency graph is strictly layered and acyclic:
@@ -42,7 +45,34 @@ implementation of the split, and the contract cannot quietly disagree with it.
 
 `vault-interface` exists so `epoch-manager` can depend on *an interface* rather
 than on a particular vault. That is the whole meaning of "wraps any
-ERC-4626-style vault". `mock-vault` implements it; so would a real vault.
+ERC-4626-style vault". `mock-vault` implements it, and so does
+`blend-adapter`, which is the worked example rather than a hypothetical:
+
+```text
+                            vault-interface
+                                   │
+                   ┌───────────────┴────────────────┐
+          ┌────────┴─────────┐            ┌─────────┴──────────┐
+          │    mock-vault    │            │   blend-adapter    │
+          │  a rate an admin │            │  a real position   │
+          │  types in        │            │  in a real pool    │
+          └──────────────────┘            └─────────┬──────────┘
+                                                    │
+                                        ┌───────────┴────────────┐
+                                        │ blend-pool-interface   │
+                                        └───────────┬────────────┘
+                                                    │
+                              ┌─────────────────────┴───────────────────┐
+                     ┌────────┴─────────┐                   ┌───────────┴──────────┐
+                     │  blend-pool-mock │                   │  the Blend pool on   │
+                     │  (a test double) │                   │  Stellar testnet     │
+                     └──────────────────┘                   └──────────────────────┘
+```
+
+The adapter is layered the same way `epoch-manager` is: it depends on a pool
+*interface*, so the test double and the real pool are interchangeable behind it.
+`blend-pool-mock` is an `rlib` with no `cdylib`, so there is no Wasm artefact for
+it and nothing that can mistake it for something deployable.
 
 ## Data flow
 
@@ -128,6 +158,15 @@ their money.
 | `Config` | `Config { admin, vault, asset }` | constructor only |
 | `Epoch` | `Epoch { .. }` | every lifecycle transition |
 | `Position(addr, tranche)` | `i128` principal | deposit, claim |
+
+`blend-adapter` keeps its own entries, in the same style:
+
+| Key | Type | Written by |
+| --- | --- | --- |
+| `Pool`, `Asset`, `Manager` | `Address` | constructor only, and never changed |
+| `RecordedBTokens` | `i128` | after every call the pool answers |
+| `TotalShares` | `i128` | deposit, redeem |
+| `ShareBalance(addr)` | `i128` adapter shares | deposit, redeem |
 
 `Config` and `Epoch` are single structs rather than many keys so one TTL bump
 covers each. Per-depositor positions are separate keys and are bumped
@@ -230,6 +269,90 @@ Two details that are easy to get wrong, and were:
   dust from everyone's floor division, and is only reachable by a depositor who
   already holds a claimable position, so it is not griefable.
 
+## The Blend adapter
+
+`contracts/blend-adapter` is a second implementation of `VaultInterface` whose
+underlying is a real Blend v2 lending pool on Stellar testnet. The epoch manager
+cannot tell it apart from `mock-vault`, which is the point of the interface
+existing at all. The design and its consequences are researched in
+[design/blend-adapter.md](design/blend-adapter.md); this section records what the
+code actually does.
+
+It holds one position per adapter, not one per depositor: it supplies the whole
+epoch's assets to the pool in a single call, and redeems the whole position in a
+single call. Its claim at the pool is a count of **bTokens**, whose value is
+`floor(b_tokens * b_rate / 10^scalar)`. `b_rate` rises as borrowers pay interest
+and falls when the pool socialises bad debt. `scalar` is read from the reserve
+rather than assumed, because v2 scaled rates by 12 and v1 by 9.
+
+### Events
+
+Both carry the same three amounts: what moved, and the pool position afterwards.
+
+| Event | Topics | Data |
+| --- | --- | --- |
+| `deposit_event` | the receiver | `assets` supplied, `shares` minted, `b_tokens` held |
+| `redeem_event` | the owner, the receiver | `shares` burned, `assets` **actually paid**, `b_tokens` left |
+
+The `assets` in `redeem_event` is what arrived, not what was asked for. It is the
+number the epoch manager receives as `V` and the waterfall splits.
+
+### Errors
+
+The vault interface is fixed and its methods return values rather than
+`Result`s, so every failure here is a trap with a code rather than a returned
+error. `Error` discriminants are explicit, so the enum value *is* the on-chain
+code.
+
+| Code | Variant | Raised when |
+| --- | --- | --- |
+| 1 | `AlreadyInitialized` | the constructor ran twice |
+| 2 | `ZeroAmount` | an amount is zero or negative |
+| 3 | `ZeroShares` | a deposit would mint nothing for a real transfer |
+| 4 | `InsufficientShares` | redeeming more shares than the ledger holds |
+| 5 | `Unauthorized` | the owner is not the configured manager |
+| 6 | `ReserveNotFound` | the pool does not list the asset at construction |
+| 7 | `PositionMissing` | a position was recorded and the pool now reports none |
+| 8 | `InsufficientWithdrawal` | the pool paid less than was asked for and said nothing |
+| 9 | `SupplyNotRegistered` | a supply returned no position for the reserve |
+| 10 | `ArithmeticOverflow` | a product or sum left `i128` |
+
+### The second non-obvious authorisation
+
+The epoch manager needed one declared entry because the token call sat two frames
+below it. The adapter needs another, for the same reason:
+
+```text
+manager → adapter.deposit(assets, receiver)
+            └─▶ adapter → SAC.transfer(manager, adapter, amount)   ← declared by the manager
+                  adapter → pool.submit([Supply(asset, assets)])
+                              └─▶ pool → SAC.transfer(adapter, pool, amount)  ← declared by the adapter
+```
+
+The adapter is the token's *source* on that second call and is not its invoker,
+so without the entry the SAC rejects it. This was checked by removing it: every
+test that supplies then fails with `Error(Auth, InvalidAction)`.
+
+There is a limit to what a test can show here, and it is worth stating. With no
+wildcard auth mocked, a successful deposit proves the entry is present and
+correct — a wrong entry would be refused. But `env.auths()` reports the
+authorisations supplied *to* the top-level invocation and does **not** surface
+invoker-contract entries, so the adapter's own entry cannot be read back out of
+the tree. The test asserts the tree the host demanded (the manager's `deposit`
+and, under it, the transfer of the manager's own tokens) and relies on the call
+succeeding for the adapter's half of it.
+
+### A position that can expire
+
+A Blend user entry that goes untouched for roughly 120 days reads back as
+**empty**, not as an error, and Strata's maximum epoch term is 365 days. So the
+adapter records the last position the pool reported and refuses to value or
+redeem a position the pool has stopped recognising (`PositionMissing`) rather
+than reporting it as worth zero — those two need different responses.
+
+This is a detection, not a fix. Nothing keeps the entry alive yet, which is risk
+B4 in [risks.md](risks.md).
+
 ## Testing strategy
 
 | Layer | Where | What it proves |
@@ -238,6 +361,8 @@ Two details that are easy to get wrong, and were:
 | Invariants | `tests/src/waterfall_props.rs` | All five spec invariants, as properties over generated inputs. |
 | Yield model | `contracts/mock-vault/src/test.rs` | The test double is trustworthy. |
 | State machine | `contracts/epoch-manager/src/test.rs` | Lifecycle transitions, bounds, and who is allowed to do what. |
+| Pool model | `contracts/blend-pool-mock/src/test.rs` | The pool double is faithful where the adapter depends on it: rounding, the silent clamp, the utilisation gate, the empty read of an expired position. |
+| Blend adapter | `contracts/blend-adapter/src/test.rs` | Every adapter function and every error, against that double, plus the auth tree for a deposit. |
 | Whole system | `tests/src/integration.rs` | A real manager, vault and token, end to end. |
 
 The split is deliberate: the arithmetic is proved by property tests, the wiring
@@ -250,7 +375,8 @@ are never taken on trust.
 
 - **A new underlying vault** implements
   [`VaultInterface`](https://docs.rs/strata-vault-interface) and nothing in
-  `epoch-manager` changes.
+  `epoch-manager` changes. `blend-adapter` is a complete worked example of that,
+  including the extra authorisation a vault which is itself a pool caller needs.
 - **New settlement math** goes in `waterfall`, with a spec change first, plus
   property tests for any new invariant.
 - **New state** needs an entry in the storage table above and a decision about

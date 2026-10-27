@@ -122,6 +122,112 @@ here as an accepted, unresolved risk of the design.
 
 ---
 
+## The Blend adapter
+
+Risks B1–B7 were identified by the research in
+[design/blend-adapter.md](design/blend-adapter.md) §8. They are recorded here now
+that there is code behind them. The adapter exists and is tested against a test
+double; **none of it has been run against a real pool on a network**, so nothing
+here is mitigated in the sense a depositor would need.
+
+### B1 — The Blend pool is a third party — **High, open**
+
+The adapter delegates custody to somebody else's contract, its admin, its mock
+oracle and its backstop. A bug in the pool, a freeze, a compromised admin or a
+bad-debt event all reach Strata depositors directly.
+
+*Mitigation:* none, and none is possible from inside Strata. The adapter is
+narrow — it can only supply, withdraw and read — and it has no admin that could
+redirect the position. That bounds what Strata can do to the pool, not what the
+pool can do to Strata.
+
+*Open:* everything. Whether a real Blend pool is an acceptable underlying is a
+maintainer decision that has not been made.
+
+### B2 — Liquidity at settlement — **High, open**
+
+Settlement redeems the entire position at one moment. If the pool cannot pay —
+utilisation at or near 100%, or a reserve the pool has frozen — the redemption
+reverts and the epoch cannot settle.
+
+*Mitigation:* none. This is R8 with a real cause behind it: the money may be lent
+out to borrowers who have not repaid. `settle` is permissionless, so anyone can
+retry, but retrying does not create liquidity.
+
+*Open:* there is no partial settlement and no timeout. A pool that stays fully
+utilised means funds wait.
+
+### B3 — A silent partial withdrawal — **Medium, mitigation built, untested against the real pool**
+
+Blend clamps an over-sized withdrawal instead of rejecting it: it burns what
+there is, pays what that is worth, and reports success. A vault that trusted the
+return value would under-pay settlement with no error anywhere.
+
+*Mitigation:* the adapter measures its own token balance across the withdrawal
+and traps with `InsufficientWithdrawal` if less arrived than it asked for, which
+rolls the whole invocation back. `a_short_payment_from_the_pool_is_refused`
+drives this using a *deliberately unfaithful* pool double, because a correct
+adapter asking for exactly what the pool reported can never trigger the real
+clamp. The double's clamp itself is tested in `blend-pool-mock`.
+
+*Open:* the check has never been exercised against Blend's real behaviour on a
+network. A clamp that lands on exactly the computed amount would still be
+indistinguishable from success.
+
+### B4 — The Blend position can expire — **High, open**
+
+An idle Blend user entry expires after roughly 120 days and then reads back as an
+**empty position, not an error**. Strata's maximum term is 365 days, so an epoch
+can outlive the position its settlement depends on.
+
+*Mitigation, and only half of one:* the adapter records the last position the
+pool reported and refuses to value or redeem a position the pool has stopped
+recognising, so the failure is loud (`PositionMissing`) rather than a silent
+zero. That detects the loss; it does not prevent it.
+
+*Open:* nothing keeps the entry alive. There is no `refresh()` entry point and no
+keeper, and the safe epoch length has **not** been measured — the ~120 days above
+comes from reading Blend's source, not from a test. Until a call is proven on a
+network to extend the entry's TTL, any epoch longer than that figure is relying
+on unverified behaviour.
+
+### B5 — Rounding dust — **Low, open**
+
+Supplying floors the bTokens minted and withdrawing ceilings the bTokens burned,
+so a round trip leaves a few base units behind. On the design note's testnet
+measurement, a 100 XLM round trip left 60 bTokens (about 148 stroops).
+
+*Mitigation:* none needed for correctness — the dust accrues to remaining
+holders rather than being lost — but the adapter's accounting must never assume
+shares in equals shares out, and it does not: it reads the pool's own reported
+position after every call rather than tracking a running total.
+
+*Open:* with one adapter position per epoch and no per-depositor shares at the
+pool, the dust is donated to whoever deposits next. That is a fairness wart, not
+a leak, and it is not measured on a real pool.
+
+### B6 — A second asset to trust — **Medium, mitigation built**
+
+`asset()` is pinned by the manager at epoch creation. An adapter built over a
+pool that lists a different contract for "XLM" would silently hold the wrong
+thing.
+
+*Mitigation:* the constructor calls `get_reserve(asset)` on the pool before
+storing anything, so a pool that does not list the asset fails the deployment
+(`ReserveNotFound`) instead of failing at the first deposit.
+
+*Open:* this only proves the pool knows the address. It does not prove the
+address is the token the rest of Strata means by XLM.
+
+### B7 — Testnet is not a market — **Low, documented**
+
+The testnet pool is driven by a mock oracle and test actors. An epoch run
+through it would prove the plumbing and nothing about liquidity or losses under
+real conditions.
+
+*Mitigation:* the design note says so, and this entry exists so a passing
+testnet epoch cannot be read as evidence of anything else.
+
 ## State and operations
 
 ### R9 — Storage expiry — **Medium**

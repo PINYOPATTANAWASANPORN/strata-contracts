@@ -1,0 +1,33 @@
+[package]
+name = "strata-blend-adapter"
+description = "A Strata vault that supplies to a Blend lending pool, implementing the vault interface unchanged."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+# cdylib for a deployable Wasm, rlib so the tests register it natively and call
+# it across contracts.
+crate-type = ["cdylib", "rlib"]
+doctest = false
+
+[features]
+# Required by the integration tests in `tests/`, which register this contract
+# with `env.register`.
+testutils = []
+
+[dependencies]
+soroban-sdk = { workspace = true }
+strata-vault-interface = { workspace = true }
+strata-blend-pool-interface = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+strata-vault-interface = { workspace = true }
+strata-blend-pool-interface = { workspace = true }
+# The pool test double. A dev-dependency only: the adapter itself never links a
+# mock, and the deployable Wasm cannot reach one.
+strata-blend-pool-mock = { workspace = true, features = ["testutils"] }

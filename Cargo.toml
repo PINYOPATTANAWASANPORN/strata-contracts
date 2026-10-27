@@ -5,6 +5,9 @@ members = [
     "contracts/vault-interface",
     "contracts/mock-vault",
     "contracts/epoch-manager",
+    "contracts/blend-pool-interface",
+    "contracts/blend-pool-mock",
+    "contracts/blend-adapter",
     "tests",
 ]
 
@@ -27,6 +30,9 @@ strata-waterfall = { path = "contracts/waterfall" }
 strata-vault-interface = { path = "contracts/vault-interface" }
 strata-epoch-manager = { path = "contracts/epoch-manager" }
 strata-mock-vault = { path = "contracts/mock-vault" }
+strata-blend-pool-interface = { path = "contracts/blend-pool-interface" }
+strata-blend-pool-mock = { path = "contracts/blend-pool-mock" }
+strata-blend-adapter = { path = "contracts/blend-adapter" }
 
 # Kept out of any non-test dependency tree on purpose.
 proptest = "1"

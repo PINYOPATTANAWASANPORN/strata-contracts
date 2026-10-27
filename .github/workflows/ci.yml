@@ -109,7 +109,7 @@ jobs:
         run: stellar contract build
 
       # Counting wasm files is not enough: it passes if the SDK renames a
-      # contract and only one of them builds. Both deployable contracts are
+      # contract and only one of them builds. Every deployable contract is
       # named explicitly, because a silently missing artefact here only shows
       # up much later as a failed deployment.
       - name: Check the artefacts
@@ -118,7 +118,7 @@ jobs:
           for wasm in target/wasm32v1-none/release/*.wasm; do
             echo "built: $wasm ($(stat -c%s "$wasm") bytes)"
           done
-          for name in strata_epoch_manager strata_mock_vault; do
+          for name in strata_epoch_manager strata_mock_vault strata_blend_adapter; do
             wasm="target/wasm32v1-none/release/${name}.wasm"
             if [ ! -f "$wasm" ]; then
               echo "missing $wasm - did 'stellar contract build' succeed?"
