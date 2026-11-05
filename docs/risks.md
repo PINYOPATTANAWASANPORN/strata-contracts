@@ -192,11 +192,22 @@ pool reported and refuses to value or redeem a position the pool has stopped
 recognising, so the failure is loud (`PositionMissing`) rather than a silent
 zero. That detects the loss; it does not prevent it.
 
-*Open:* nothing keeps the entry alive. There is no `refresh()` entry point and no
-keeper, and the safe epoch length has **not** been measured — the ~120 days above
-comes from reading Blend's source, not from a test. Until a call is proven on a
-network to extend the entry's TTL, any epoch longer than that figure is relying
-on unverified behaviour.
+A permissionless `refresh()` now reads the pool's `get_positions`, the call that
+renews the pool's own entry, and records the ledger in `last_refreshed`;
+`deposit` and `redeem` go through the same read. It cannot extend the entry
+itself — the entry belongs to the pool — so the pool's own read is the
+mechanism.
+
+*Open:* the extension has **not** been observed. On 2026-11-05 a real adapter
+position was refreshed on testnet from an identity that was not the manager: the
+call succeeded, `last_refreshed` moved 5 569 344 → 5 569 359, and the pool
+entry's live-until ledger stayed at 7 642 944 before and after. The entry was
+created with 2 073 600 ledgers (120.0 days) of life and still had ~119 days left
+at the refresh, above Blend's ~100-day extension threshold, so the read was a
+no-op by design. The measured lifetime of a fresh entry is 120.0 days; a safe
+epoch length longer than that remains unproven, and a keeper is still required.
+Re-running the measurement on an entry within ~100 days of expiry is what would
+close the proof gap.
 
 ### B5 — Rounding dust — **Low, open**
 

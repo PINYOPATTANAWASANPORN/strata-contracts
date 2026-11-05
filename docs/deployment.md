@@ -304,6 +304,30 @@ that the senior's target interest is never funded out of junior principal.
 
 ---
 
+## The A3 refresh probe
+
+On 2026-11-05 a separate adapter was deployed against the same Blend pool to
+measure the pool's position TTL. It is not the demo deployment above and is
+recorded separately in
+[`deployments/testnet-blend-refresh.json`](../deployments/testnet-blend-refresh.json).
+
+| | |
+| --- | --- |
+| Adapter | `CCBPPPH6T42DQ5BVANHVQYXZRI2NBMVYLKR67HA6B3KJSBCOJPHHBYBQ` |
+| Pool | `CCEBVDYM32YNYCVNRXQKDFFPISJJCV557CDZEIRBEE4NCV4KHPQ44HGF` |
+| Manager | `GC6A5FQOXIVRYYOQACUVFIK4BUQCC3LCR75XKJFQOD5HFL6IWD3MVHRS` |
+| Refresh caller | `GBM3RS65VIHM24D3AKNEC7ZLVBZCNCVB5WRBAGA7JOXLELFGEWC34AO6` |
+| Deposit | 1 XLM → 3 828 915 bTokens, tx `dbb221d9…` |
+| Refresh | tx `dc85f5c5…`, `last_refreshed` 5 569 344 → 5 569 359 |
+| Pool entry live-until | 7 642 944 before and after — **not extended** |
+
+The refresh succeeded and was permissionless, but the entry still had ~120 days
+of life, above Blend's ~100-day extension threshold, so the read did not move
+it. The extension remains unproven; see `docs/design/blend-adapter.md` §5 and
+`docs/risks.md` B4.
+
+---
+
 ## Known issues
 
 ### The CLI's simulation cache can produce an invalid footprint

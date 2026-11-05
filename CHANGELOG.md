@@ -6,6 +6,17 @@ file is a production-readiness claim.
 
 ## 2026-11-05
 
+- **feat:** add a permissionless `refresh()` to the Blend adapter that reads the
+  pool's position — the read that renews the pool's own user entry — and records
+  the ledger in `last_refreshed`; `deposit` and `redeem` use the same path. Adds
+  `scripts/refresh-adapter-testnet.sh` and three tests: the call needs no
+  authorisation, it moves no funds, and the pool double's entry TTL advances.
+  On testnet on 2026-11-05 the call succeeded from a non-manager identity and
+  `last_refreshed` moved 5 569 344 → 5 569 359, but the entry's live-until
+  ledger did not (7 642 944 before and after): the entry was still ~120 days
+  from expiry, above Blend's ~100-day extension threshold. **TTL extension is
+  therefore not proven**, and risk B4 remains open. Adds
+  `deployments/testnet-blend-refresh.json` for the probe.
 - **fix:** declare the full `Reserve` shape the deployed Blend pool returns. The
   interface carried only the supplier-relevant subset (9 config fields and 4
   data fields); the pool's structs have 13 and 7. Soroban decodes a struct as an

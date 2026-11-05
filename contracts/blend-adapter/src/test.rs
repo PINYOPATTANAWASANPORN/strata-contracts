@@ -15,7 +15,8 @@ extern crate std;
 use super::*;
 use soroban_sdk::auth::InvokerContractAuthEntry;
 use soroban_sdk::testutils::{
-    Address as _, AuthorizedFunction, AuthorizedInvocation, Events, MockAuth, MockAuthInvoke,
+    Address as _, AuthorizedFunction, AuthorizedInvocation, Events, Ledger, MockAuth,
+    MockAuthInvoke,
 };
 use soroban_sdk::xdr::ContractEventBody;
 use soroban_sdk::{
@@ -452,6 +453,69 @@ fn a_liquidity_limited_redeem_fails_rather_than_shrinking_the_payout() {
         "the pool refuses, so the redemption fails rather than paying short"
     );
     assert_eq!(w.adapter().total_shares(), 1_000);
+}
+
+// --- refresh ---------------------------------------------------------------
+
+#[test]
+fn deposit_records_when_the_position_was_last_read() {
+    let w = world();
+    w.env.ledger().set_sequence_number(42);
+
+    w.deposit(1_000);
+
+    assert_eq!(w.adapter().last_refreshed(), 42);
+}
+
+#[test]
+fn refresh_is_permissionless_and_moves_no_funds() {
+    let w = world();
+    w.deposit(1_000);
+    let shares_before = w.adapter().total_shares();
+    let assets_before = w.adapter().total_assets();
+    let manager_before = w.token().balance(&w.manager);
+    let adapter_before = w.token().balance(&w.adapter);
+    let pool_before = w.token().balance(&w.pool);
+
+    // Nothing is mocked from here on, so `refresh` must need no authorisation
+    // at all: a keeper is an address the adapter has never heard of.
+    w.env.mock_auths(&[]);
+    w.env.ledger().set_sequence_number(500);
+
+    let refreshed_at = w.adapter().refresh();
+
+    assert_eq!(refreshed_at, 500);
+    assert_eq!(w.adapter().last_refreshed(), 500);
+    assert_eq!(w.adapter().total_shares(), shares_before);
+    assert_eq!(w.adapter().total_assets(), assets_before);
+    assert_eq!(w.token().balance(&w.manager), manager_before);
+    assert_eq!(w.token().balance(&w.adapter), adapter_before);
+    assert_eq!(w.token().balance(&w.pool), pool_before);
+}
+
+#[test]
+fn refresh_extends_the_pools_position_entry_ttl() {
+    let w = world();
+    w.deposit(1_000);
+
+    // The double gives the entry 120 days of life, as the real pool does. Move
+    // to within its bump threshold, so the next read has to extend it.
+    w.env.ledger().set_sequence_number(2_000_000);
+    let live_until_before = w.pool().position_live_until(&w.adapter);
+    let recorded_b_tokens = w.adapter().recorded_b_tokens();
+
+    w.adapter().refresh();
+
+    let live_until_after = w.pool().position_live_until(&w.adapter);
+    assert!(
+        live_until_after > live_until_before,
+        "refresh did not extend the pool's position entry: {live_until_before} -> {live_until_after}"
+    );
+    assert_eq!(
+        w.adapter().recorded_b_tokens(),
+        recorded_b_tokens,
+        "a refresh moves no position"
+    );
 }
 
 // --- views -----------------------------------------------------------------

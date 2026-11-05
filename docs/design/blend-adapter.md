@@ -7,10 +7,15 @@ The design below was built on 2026-10-27 as `contracts/blend-adapter`, with
 `contracts/blend-pool-interface` for the pool ABI subset and
 `contracts/blend-pool-mock` as the test double. Property tests for its
 accounting and full-epoch integration tests through the real epoch manager were
-added the same day. That work is tested against the double only: the adapter has
-not been deployed, has never run against a real pool, and the TTL finding in
-§4.7 is still unaddressed. Everything measured in §5 and every risk in §8 stands
-as written. See [`risks.md`](../risks.md) B1–B7 for where each one stands now.
+added the same day. An adapter was deployed against the real testnet pool on
+2026-11-05 and one position was supplied; that attempt exposed and fixed two
+interface bugs (the `b_rate` scale and the full `Reserve` shape) before it
+succeeded. `refresh()` was then called against that position. It did not change
+the pool entry's live-until ledger, because the entry still had ~120 days left
+and Blend only extends below ~100 days, so the TTL extension remains unproven.
+The rest of §5 and every risk in §8 stands as written, except where the
+2026-11-05 measurements at the end of §5 say otherwise. See
+[`risks.md`](../risks.md) B1–B7 for where each one stands now.
 **Scope:** can Strata's epoch manager run against a real Stellar yield source on
 testnet — a Blend lending pool — through an adapter that implements the existing
 `vault-interface` unchanged?
@@ -326,6 +331,10 @@ The manager's maximum term is one year. The Blend position's TTL is about four
 months. **An epoch longer than roughly 120 days can outlive the position it
 depends on.** This is the single most important operational finding in this note.
 
+The adapter's `refresh()` calls the read that extends the entry (§7.4), but the
+extension only fires when less than ~100 days remain. The 2026-11-05 measurement
+at the end of §5 did not observe it move on a freshly created entry.
+
 ### 4.8 What the admin can do
 
 The pool admin can change reserve parameters through a 7-day queue
@@ -379,10 +388,42 @@ Four things this establishes, which the source predicted:
    so a ten-second window cannot be read as an annual rate. No rate is claimed
    here.
 
-**Not exercised, and therefore not claimed:** a withdrawal against a pool at
-100% utilization; a frozen pool; bad debt; TTL expiry; and — importantly — a
-**contract** acting as the pool user. Rows 1–5 used a keypair. The adapter's own
-authorisation path is analysed in §7 but has not been run.
+**Not exercised in that research, and therefore not claimed there:** a
+withdrawal against a pool at 100% utilization; a frozen pool; bad debt; TTL
+expiry. Rows 1–5 used a keypair. The adapter's own authorisation path was
+analysed in §7 but had not been run at that point.
+
+### The adapter and its refresh path, exercised 2026-11-05
+
+This was the first real-pool run. It used Stellar CLI 28.1.0, soroban-sdk
+27.0.6, protocol 30, and the same pool as above. The machine-readable record is
+[`deployments/testnet-blend-refresh.json`](../../deployments/testnet-blend-refresh.json).
+
+| Step | Result | Transaction |
+| --- | --- | --- |
+| deploy adapter (`CCBPPPH6…`) over the XLM reserve | constructor succeeded; wasm hash `dbf5a1f4…` matches the local build | [`3588f1bf…`](https://stellar.expert/explorer/testnet/tx/3588f1bf19de5cfa493751eacafbc78326d8f9b3c19b6bce68fdccd6ee9dc0c0) |
+| manager supplies 10 000 000 stroops (1 XLM) | 3 828 915 bTokens minted; position at reserve index 0 | [`dbb221d9…`](https://stellar.expert/explorer/testnet/tx/dbb221d9be1ba9762df2bb14831c307520d53d82daf3fb834a6793d4c108f99f) |
+| `refresh()` from a different identity | succeeded; `last_refreshed` 5 569 344 → 5 569 359 | [`dc85f5c5…`](https://stellar.expert/explorer/testnet/tx/dc85f5c54a50da726470d5acab8dc5415197c97b198dae4bb917652d6f23e78d) |
+
+The refresh caller was `GBM3RS65…`, not the adapter's manager, and the call
+needed no authorisation. The adapter's recorded ledger moved, so the read
+executed.
+
+The pool's `Positions(adapter)` entry, read with
+`stellar ledger entry fetch contract-data`, did **not** move:
+
+| | live-until ledger |
+| --- | --- |
+| before refresh | 7 642 944 |
+| after refresh | 7 642 944 |
+
+The entry was created at ledger 5 569 344 and bumped to exactly 2 073 600
+ledgers of life — 120 days at 5 s per ledger. At the refresh ledger (5 569 359)
+its remaining life was 2 073 585 ledgers, still above Blend's ~100-day
+(1 728 000-ledger) threshold, so `get_user_positions` performed no extension.
+**The measurement therefore does not prove that `refresh()` extends a position,
+only that it executes and is permissionless.** The same measurement on an entry
+within the threshold would be the proof; that entry does not exist yet.
 
 ---
 
@@ -479,9 +520,13 @@ needs one of:
   because the pool's own view bumps the entry; or
 - a documented rule that epoch terms stay under ~100 days.
 
-The first is cheap and belongs in the adapter. The third is a policy that will
-be forgotten. Recommendation: implement `refresh()`, document the 100-day
-constraint, and treat a missing keeper as a denominated risk (§8, B4).
+The first is cheap and belongs in the adapter, and is now implemented as
+`refresh()` with a `last_refreshed` view; `deposit` and `redeem` go through the
+same read. The third is a policy that will be forgotten. Keep the 100-day
+constraint documented and treat a missing keeper as a denominated risk (§8, B4).
+The 2026-11-05 measurement at the end of §5 shows the call running but not
+extending a fresh entry, so treat the keeper as required and the extension as
+unproven.
 
 ### 7.5 Reentrancy and call ordering
 
