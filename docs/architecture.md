@@ -281,9 +281,10 @@ code actually does.
 It holds one position per adapter, not one per depositor: it supplies the whole
 epoch's assets to the pool in a single call, and redeems the whole position in a
 single call. Its claim at the pool is a count of **bTokens**, whose value is
-`floor(b_tokens * b_rate / 10^scalar)`. `b_rate` rises as borrowers pay interest
-and falls when the pool socialises bad debt. `scalar` is read from the reserve
-rather than assumed, because v2 scaled rates by 12 and v1 by 9.
+`floor(b_tokens * b_rate / 10^12)`. `b_rate` rises as borrowers pay interest
+and falls when the pool socialises bad debt. The divisor is Blend v2's fixed
+`SCALAR_12`; `Reserve::scalar` is the asset's `10^decimals` and is not this
+scale.
 
 ### Events
 

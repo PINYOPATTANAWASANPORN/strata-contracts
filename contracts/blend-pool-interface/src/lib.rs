@@ -22,11 +22,10 @@
 //!
 //! # Two things worth knowing before using it
 //!
-//! - **`b_rate` and `d_rate` are scaled, and the scale is a field, not a
-//!   constant.** v2 uses 12 decimals and v1 used 9. The interface carries
-//!   `Reserve::scalar` so a caller can use `10^scalar` instead of hard-coding
-//!   `1e12`. The design note records that reading v1 by mistake gets this wrong
-//!   by a factor of a thousand.
+//! - **`b_rate` and `d_rate` are scaled by a fixed `1e12` in v2.** That is
+//!   Blend's own `SCALAR_12` constant and does not vary by asset. It is not
+//!   `Reserve::scalar`: `scalar` is the underlying asset's base-unit scalar,
+//!   `10^decimals` (1e7 for XLM), and is not the rate scale.
 //! - **A withdrawal larger than the position is clamped, not rejected.** The
 //!   pool burns what there is and pays what that is worth. Nothing in the
 //!   return value says the request was short. A caller that needs an exact
@@ -109,13 +108,13 @@ pub struct ReserveConfig {
 #[contracttype]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReserveData {
-    /// bTokens per unit of the asset, scaled by [`Reserve::scalar`]. Rises with
-    /// accrued interest and **falls when bad debt is socialised**, which is the
-    /// only way a supplier's principal can shrink on the pool's own terms.
+    /// bTokens per unit of the asset, scaled by `1e12`. Rises with accrued
+    /// interest and **falls when bad debt is socialised**, which is the only
+    /// way a supplier's principal can shrink on the pool's own terms.
     pub b_rate: i128,
     /// bTokens outstanding across all suppliers.
     pub b_supply: i128,
-    /// Debt tokens per unit borrowed, scaled by [`Reserve::scalar`].
+    /// Debt tokens per unit borrowed, scaled by `1e12`.
     pub d_rate: i128,
     pub d_supply: i128,
 }
@@ -127,9 +126,9 @@ pub struct Reserve {
     pub asset: Address,
     pub config: ReserveConfig,
     pub data: ReserveData,
-    /// The decimal exponent `b_rate` and `d_rate` are scaled by. 12 in v2, 9 in
-    /// v1. Read it; do not assume it.
-    pub scalar: u32,
+    /// The underlying asset base-unit scalar, `10^decimals`. In v2, `b_rate`
+    /// and `d_rate` are always scaled by `10^12`; this field is not that scale.
+    pub scalar: i128,
 }
 
 /// The pool surface the adapter depends on.

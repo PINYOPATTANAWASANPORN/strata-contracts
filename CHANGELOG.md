@@ -4,6 +4,16 @@ Notable changes to this repository, newest first. Dates are the date the change
 landed, not a release date. Strata is unaudited and testnet-only; nothing in this
 file is a production-readiness claim.
 
+## 2026-11-05
+
+- **fix:** value the Blend adapter's position with Blend v2's fixed `1e12`
+  `b_rate` scale instead of `Reserve::scalar`. `scalar` is the underlying
+  asset's `10^decimals` (1e7 for XLM), so the previous divisor under-reported a
+  position against a real pool by five orders of magnitude. The pool double now
+  reports the same `scalar` a real reserve does, and its conversions use the
+  fixed scale. The adapter still has not run against a real pool; no on-chain
+  claim is made here.
+
 ## 2026-10-27
 
 - **test:** property-test the Blend adapter's accounting (rounding cannot

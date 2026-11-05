@@ -272,16 +272,23 @@ fn withdrawing_with_no_position_reverts_rather_than_doing_nothing() {
 }
 
 #[test]
-fn the_scale_is_read_from_the_reserve_so_v1s_nine_decimals_work() {
+fn the_reserve_reports_the_asset_scalar_and_rates_use_the_fixed_1e12_scale() {
     let w = world();
-    // v1 scaled rates by 9, not 12.
-    w.pool().set_scalar(&9);
-    w.pool().set_b_rate(&1_000_000_000);
     w.give(&w.user, 100_000_000);
 
+    let reserve = w.pool().get_reserve(&w.asset);
+    assert_eq!(
+        reserve.scalar, 10_000_000,
+        "scalar is 10^decimals for the asset (7 for XLM), not the b_rate scale"
+    );
+    assert_eq!(
+        reserve.data.b_rate, ONE_TO_ONE,
+        "b_rate is always scaled by 1e12 in v2"
+    );
+
+    // One asset unit at the 1:1 rate buys one bToken.
     let positions = w.supply(100_000_000);
     assert_eq!(positions.supply.get(0).unwrap(), 100_000_000);
-    assert_eq!(w.pool().get_reserve(&w.asset).scalar, 9);
 }
 
 #[test]

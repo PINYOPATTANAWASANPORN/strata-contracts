@@ -22,7 +22,7 @@
 //! pool says the underlying position is worth:
 //!
 //! ```text
-//! position value = floor(b_tokens * b_rate / 10^scalar)
+//! position value = floor(b_tokens * b_rate / 10^12)
 //! share price    = position value / adapter shares
 //! ```
 //!
@@ -432,10 +432,8 @@ impl VaultInterface for BlendAdapter {
 pub struct Snapshot {
     /// bTokens the pool reports for this adapter.
     pub reported: i128,
-    /// bTokens per asset unit, scaled by `scalar`.
+    /// bTokens per asset unit, scaled by `1e12`.
     pub b_rate: i128,
-    /// The scale `b_rate` is expressed in.
-    pub scalar: u32,
     /// The reserve key the position appears under.
     pub index: u32,
 }
@@ -449,7 +447,6 @@ fn position_snapshot(env: &Env) -> Snapshot {
     Snapshot {
         reported,
         b_rate: reserve.data.b_rate,
-        scalar: reserve.scalar,
         index,
     }
 }
@@ -459,7 +456,7 @@ fn live_assets(env: &Env, recorded: i128, snapshot: &Snapshot) -> i128 {
     if recorded > 0 && snapshot.reported <= 0 {
         panic_with_error!(env, Error::PositionMissing);
     }
-    b_token_value(env, snapshot.reported, snapshot.b_rate, snapshot.scalar)
+    b_token_value(env, snapshot.reported, snapshot.b_rate)
 }
 
 fn live_total_assets(env: &Env) -> i128 {
@@ -530,26 +527,23 @@ pub fn supply_auth_entry(
 
 // --- arithmetic ------------------------------------------------------------
 
-/// `10^scalar`, with a trap rather than a wrap.
-fn scale(env: &Env, scalar: u32) -> i128 {
-    let mut acc: i128 = 1;
-    for _ in 0..scalar {
-        acc = acc
-            .checked_mul(10)
-            .unwrap_or_else(|| panic_with_error!(env, Error::ArithmeticOverflow));
-    }
-    acc
-}
+/// Blend v2's fixed scale for `b_rate` and `d_rate`: its `SCALAR_12` constant.
+///
+/// Deliberately not `Reserve::scalar`. That field is the underlying asset's
+/// base-unit scalar, `10^decimals` — 1e7 for XLM — and dividing by it would
+/// misvalue the position by five orders of magnitude. Blend applies `SCALAR_12`
+/// in `to_asset_from_b_token` regardless of the asset, so this does too.
+const B_RATE_SCALAR: i128 = 1_000_000_000_000;
 
-/// `floor(b_tokens * b_rate / 10^scalar)`.
-fn b_token_value(env: &Env, b_tokens: i128, b_rate: i128, scalar: u32) -> i128 {
+/// `floor(b_tokens * b_rate / B_RATE_SCALAR)`.
+fn b_token_value(env: &Env, b_tokens: i128, b_rate: i128) -> i128 {
     if b_tokens <= 0 || b_rate <= 0 {
         return 0;
     }
     b_tokens
         .checked_mul(b_rate)
         .unwrap_or_else(|| panic_with_error!(env, Error::ArithmeticOverflow))
-        / scale(env, scalar)
+        / B_RATE_SCALAR
 }
 
 /// `a * b / c`, floored, trapping on overflow.

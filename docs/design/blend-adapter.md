@@ -246,6 +246,12 @@ pushed to holders; `b_rate` is recomputed lazily the next time the reserve is
 loaded, and it is stored at 12 decimals (v2). `Reserve::load` short-circuits if
 the reserve has already been updated in the current ledger.
 
+That `1e12` is Blend's fixed `SCALAR_12`, applied regardless of the asset. It is
+**not** `Reserve::scalar`, which `Reserve::load` sets to `10^decimals` for the
+underlying asset. Dividing by the reserve's `scalar` instead misvalues a
+position by `10^(12 - decimals)` — five orders of magnitude for XLM's 7
+decimals.
+
 Two reads are needed to value a position:
 `get_positions(account)` → bTokens, and `get_reserve(asset)` → `b_rate`. There is
 no single "value of my position" view.

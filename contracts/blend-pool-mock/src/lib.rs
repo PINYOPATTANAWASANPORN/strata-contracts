@@ -15,8 +15,8 @@
 //!
 //! | Behaviour | Why the adapter cares |
 //! | --- | --- |
-//! | `b_tokens = floor(amount * 10^scalar / b_rate)` on supply | rounding is against the depositor on the way in |
-//! | `to_burn = ceil(amount * 10^scalar / b_rate)` on withdrawal | and against the depositor on the way out |
+//! | `b_tokens = floor(amount * 1e12 / b_rate)` on supply | rounding is against the depositor on the way in |
+//! | `to_burn = ceil(amount * 1e12 / b_rate)` on withdrawal | and against the depositor on the way out |
 //! | an over-sized withdrawal is **clamped, not rejected** | a short payment arrives with no error and no signal |
 //! | a withdrawal over the available liquidity **reverts** (`1207`) | settlement can be blocked by borrowers, not by the vault |
 //! | an expired position reads back **empty**, not as an error | the position can vanish while the epoch still needs it |
@@ -103,7 +103,6 @@ const SUPPLY_BLOCKED_STATUSES: [u32; 3] = [4, 5, 6];
 pub enum DataKey {
     Asset,
     BRate,
-    Scalar,
     Index,
     Decimals,
     Enabled,
@@ -120,8 +119,8 @@ pub struct MockPool;
 
 #[contractimpl]
 impl MockPool {
-    /// Builds a pool with one reserve: `asset`, at `b_rate`, index 0, 12
-    /// decimals of scale, enable, unlimited cap, and unlimited liquidity.
+    /// Builds a pool with one reserve: `asset` with 7 decimals, at `b_rate`,
+    /// index 0, enabled, unlimited cap, and unlimited liquidity.
     pub fn __constructor(env: Env, asset: Address, b_rate: i128) {
         if env.storage().persistent().has(&DataKey::Asset) {
             panic!("already initialized");
@@ -132,9 +131,6 @@ impl MockPool {
         let s = env.storage().persistent();
         s.set(&DataKey::Asset, &asset);
         s.set(&DataKey::BRate, &b_rate);
-        // 12, as Blend v2 moved to. The adapter reads this rather than assuming
-        // it, so a test can set 9 and prove the adapter follows the field.
-        s.set(&DataKey::Scalar, &12_u32);
         s.set(&DataKey::Index, &0_u32);
         s.set(&DataKey::Decimals, &7_u32);
         s.set(&DataKey::Enabled, &true);
@@ -185,11 +181,6 @@ impl MockPool {
         env.storage()
             .persistent()
             .set(&DataKey::PoolStatus, &status);
-    }
-
-    /// Sets the decimal exponent for `b_rate`.
-    pub fn set_scalar(env: Env, scalar: u32) {
-        env.storage().persistent().set(&DataKey::Scalar, &scalar);
     }
 
     /// **Deliberately unfaithful.** Makes a withdrawal pay `underpay` fewer
@@ -292,11 +283,12 @@ impl BlendPool for MockPool {
             panic_with_error!(&env, Error::InternalReserveNotFound);
         }
         let s = env.storage().persistent();
+        let decimals: u32 = s.get(&DataKey::Decimals).unwrap_or(7);
         Reserve {
             asset,
             config: ReserveConfig {
                 index: s.get(&DataKey::Index).unwrap_or(0),
-                decimals: s.get(&DataKey::Decimals).unwrap_or(7),
+                decimals,
                 enabled: s.get(&DataKey::Enabled).unwrap_or(true),
                 c_factor: 9_000,
                 l_factor: 9_000,
@@ -310,7 +302,7 @@ impl BlendPool for MockPool {
                 d_rate: 0,
                 d_supply: 0,
             },
-            scalar: s.get(&DataKey::Scalar).unwrap_or(12),
+            scalar: 10_i128.pow(decimals),
         }
     }
 }
@@ -436,55 +428,34 @@ fn positions_of(env: &Env, account: &Address) -> Positions {
     }
 }
 
-/// `10^scalar`, the scale `b_rate` is expressed in.
-fn scale(env: &Env, scalar: u32) -> i128 {
-    let mut acc: i128 = 1;
-    for _ in 0..scalar {
-        acc = acc
-            .checked_mul(10)
-            .unwrap_or_else(|| panic_with_error!(env, Error::InvalidAmount));
-    }
-    acc
-}
+/// Blend v2's fixed scale for `b_rate` and `d_rate`: its `SCALAR_12` constant.
+///
+/// Not the reserve's `scalar` field, which is `10^decimals` for the underlying
+/// asset. The real pool applies `SCALAR_12` to both conversions regardless.
+const B_RATE_SCALAR: i128 = 1_000_000_000_000;
 
-/// `floor(amount * 10^scalar / b_rate)`. Rounding is against the depositor.
+/// `floor(amount * B_RATE_SCALAR / b_rate)`. Rounding is against the depositor.
 fn to_b_token_down(env: &Env, amount: i128, b_rate: i128) -> i128 {
-    let scalar: u32 = env
-        .storage()
-        .persistent()
-        .get(&DataKey::Scalar)
-        .unwrap_or(12);
     amount
-        .checked_mul(scale(env, scalar))
+        .checked_mul(B_RATE_SCALAR)
         .unwrap_or_else(|| panic_with_error!(env, Error::InvalidAmount))
         / b_rate
 }
 
-/// `ceil(amount * 10^scalar / b_rate)`. Rounding is against the withdrawer.
+/// `ceil(amount * B_RATE_SCALAR / b_rate)`. Rounding is against the withdrawer.
 fn to_b_token_up(env: &Env, amount: i128, b_rate: i128) -> i128 {
-    let scalar: u32 = env
-        .storage()
-        .persistent()
-        .get(&DataKey::Scalar)
-        .unwrap_or(12);
-    let scale = scale(env, scalar);
     let numerator = amount
-        .checked_mul(scale)
+        .checked_mul(B_RATE_SCALAR)
         .unwrap_or_else(|| panic_with_error!(env, Error::InvalidAmount));
     (numerator + b_rate - 1) / b_rate
 }
 
-/// `floor(b_tokens * b_rate / 10^scalar)`.
+/// `floor(b_tokens * b_rate / B_RATE_SCALAR)`.
 fn b_token_value(env: &Env, b_tokens: i128, b_rate: i128) -> i128 {
-    let scalar: u32 = env
-        .storage()
-        .persistent()
-        .get(&DataKey::Scalar)
-        .unwrap_or(12);
     b_tokens
         .checked_mul(b_rate)
         .unwrap_or_else(|| panic_with_error!(env, Error::InvalidAmount))
-        / scale(env, scalar)
+        / B_RATE_SCALAR
 }
 
 fn load_asset(env: &Env) -> Address {
