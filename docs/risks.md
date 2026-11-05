@@ -114,11 +114,31 @@ epoch cannot settle and depositor funds are stuck in the vault for as long as
 that persists.
 
 *Mitigation:* `settle` is permissionless, so **anyone** can retry it. There is
-no admin key that can block or reorder settlement.
+no admin key that can block or reorder settlement. Pinned by
+`vault_trapping_on_deposit_or_redeem_rolls_back_and_allows_retry_when_fixed` in
+`tests/src/hostile_vault_test.rs`.
 
 *Open:* there is no timeout, no emergency path, and no alternative settlement
-route. A permanently broken vault means permanently locked funds. Recorded
-here as an accepted, unresolved risk of the design.
+route. Because `Config.vault` is immutable once constructed, a permanently
+broken vault means permanently locked funds unless the vault contract itself is
+upgraded or unpaused by its own administrator. Recorded here as an accepted,
+unresolved risk of the design.
+
+### R8a — Hostile-vault reentrancy and malformed vault callbacks — **Low (reentrancy) / High (dishonest partial redemption), analysed**
+
+`epoch-manager` invokes the external vault during `deposit` (`vault.deposit`),
+`settle` (`vault.balance_of`, `vault.redeem`) and the read-only `position_of`
+view (`vault.convert_to_assets`). `tests/src/hostile_vault_test.rs` drives a
+malicious `HostileVault` across every callback and fault mode:
+
+| Vector | Vault behaviour | Observed outcome | Can funds become stuck & who can recover? |
+| --- | --- | --- | --- |
+| Re-enter `deposit`, `settle` or `claim` from `vault.deposit` | Calls back into `epoch-manager` during `deposit` | **Rejected by Soroban host** (`InvokeError::Abort`); transaction rolls back atomically ([Soroban security docs](https://developers.stellar.org/docs/build/security-docs)) | No — depositor keeps 100% of tokens |
+| Re-enter `deposit`, `settle` or `claim` from `vault.redeem` | Calls back into `epoch-manager` during `settle` | **Rejected by Soroban host** (`InvokeError::Abort`); epoch remains `Open` and `vault_shares` unchanged | Only while vault remains malicious; recoverable once vault stops re-entering and anyone retries `settle()` |
+| Inflated or deflated `total_assets` / `convert_to_assets` | Reports 100x or 0 on view calls | Pre-settlement `position_of().estimated_payout` reflects the lie, but **`settle()` ignores both views** and settles strictly on `redeem` output | No — settlement and claims pay exact waterfall amounts |
+| Inflated `redeem` return or underpaid token transfer | Returns `value > transferred` so `owed > held` | **Rejected by manager** (`Error::InvalidAmount` at `held < owed`); `settle()` rolls back | Funds remain in vault with epoch `Open` until vault transfers at least the reported `value` |
+| Dishonest partial `redeem` | Transfers and reports `0.5x` while keeping `0.5x` in vault | **Succeeds** (`held == owed`); manager treats shortfall as a strategy loss (R6), Junior absorbs first, and `epoch.vault_shares` is zeroed | **Yes** — the withheld `0.5x` remains stranded inside the vault contract; only the vault's own admin/governance could recover it |
+| Vault traps (`panic!`) on `deposit` or `redeem` | Traps inside `deposit` or `redeem` | `deposit` rolls back leaving tokens with depositor; `settle` rolls back leaving epoch `Open` (R8) | On `redeem` trap, funds stay locked in the vault until the vault stops trapping and `settle()` is retried |
 
 ---
 
@@ -409,8 +429,6 @@ than dismissed:
 - Gas and resource limits on mainnet. Tests enforce mainnet resource limits by
   default from SDK v25, and nothing currently fails, but a worst-case
   `settle` with many depositors has not been measured.
-- Reentrancy beyond the claim path's position-clearing. The mock vault calls
-  back into nothing, so a hostile vault's callback behaviour is untested.
 - Front-running settlement. Anyone can call it, and the result depends on the
   vault's valuation at that moment. A vault whose price can be moved in the
   same block makes this a real vector.
