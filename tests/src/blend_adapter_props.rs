@@ -31,8 +31,8 @@ use soroban_sdk::{testutils::Address as _, token::StellarAssetClient, Address, E
 use strata_blend_adapter::{BlendAdapter, BlendAdapterClient};
 use strata_blend_pool_mock::{MockPool, MockPoolClient};
 
-/// Blend v2's `b_rate` scale. The adapter reads it from the reserve, so this is
-/// only the value the fixture gives the pool.
+/// Blend v2's fixed `b_rate` scale, `SCALAR_12`. The adapter divides by the
+/// same constant; this is the scale the fixture's rates are expressed in.
 const SCALAR: i128 = 1_000_000_000_000;
 
 /// Cases run by default. Every case deploys a token, a pool and an adapter and
