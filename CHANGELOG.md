@@ -6,6 +6,12 @@ file is a production-readiness claim.
 
 ## 2026-11-05
 
+- **fix:** declare the full `Reserve` shape the deployed Blend pool returns. The
+  interface carried only the supplier-relevant subset (9 config fields and 4
+  data fields); the pool's structs have 13 and 7. Soroban decodes a struct as an
+  exact field set, so pointing an adapter at the real testnet pool failed in the
+  constructor with `UnexpectedSize`. The double now returns the same shape. No
+  accounting behaviour changed.
 - **fix:** value the Blend adapter's position with Blend v2's fixed `1e12`
   `b_rate` scale instead of `Reserve::scalar`. `scalar` is the underlying
   asset's `10^decimals` (1e7 for XLM), so the previous divisor under-reported a

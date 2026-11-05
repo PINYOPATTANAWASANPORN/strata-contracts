@@ -82,8 +82,10 @@ pub struct Positions {
 /// A reserve's parameters.
 ///
 /// A supplier's only meaningful fields here are `index`, `enabled` and
-/// `supply_cap`; the collateral and liquidation factors are recorded for
-/// completeness and are never read by the adapter.
+/// `supply_cap`; the collateral, liquidation and interest-curve parameters are
+/// recorded for completeness and are never read by the adapter. They are still
+/// declared: a Soroban struct decodes as an exact field set, so a partial
+/// `ReserveConfig` cannot decode the pool's thirteen-field map.
 #[contracttype]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReserveConfig {
@@ -100,6 +102,16 @@ pub struct ReserveConfig {
     pub util: u32,
     /// Borrowing ceiling, in basis points.
     pub max_util: u32,
+    /// Base interest rate on the utilisation curve.
+    pub r_base: u32,
+    /// First slope of the utilisation curve.
+    pub r_one: u32,
+    /// Second slope of the utilisation curve.
+    pub r_two: u32,
+    /// Third slope of the utilisation curve.
+    pub r_three: u32,
+    /// How quickly the curve modifier reacts to utilisation.
+    pub reactivity: u32,
     /// Maximum total supply, in base units of the asset.
     pub supply_cap: i128,
 }
@@ -117,6 +129,12 @@ pub struct ReserveData {
     /// Debt tokens per unit borrowed, scaled by `1e12`.
     pub d_rate: i128,
     pub d_supply: i128,
+    /// Interest-rate curve modifier, in 7 decimals.
+    pub ir_mod: i128,
+    /// Underlying currently owed to the backstop.
+    pub backstop_credit: i128,
+    /// Ledger timestamp of the last reserve update.
+    pub last_time: u64,
 }
 
 /// A reserve: which asset, its parameters, its live state, and the scale.

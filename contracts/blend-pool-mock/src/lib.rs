@@ -294,6 +294,11 @@ impl BlendPool for MockPool {
                 l_factor: 9_000,
                 util: 5_000,
                 max_util: 9_500,
+                r_base: 5_000,
+                r_one: 300_000,
+                r_two: 2_000_000,
+                r_three: 10_000_000,
+                reactivity: 50,
                 supply_cap: s.get(&DataKey::SupplyCap).unwrap_or(i128::MAX),
             },
             data: ReserveData {
@@ -301,6 +306,9 @@ impl BlendPool for MockPool {
                 b_supply: s.get(&DataKey::BSupply).unwrap_or(0),
                 d_rate: 0,
                 d_supply: 0,
+                ir_mod: 100_000_000,
+                backstop_credit: 0,
+                last_time: 0,
             },
             scalar: 10_i128.pow(decimals),
         }
