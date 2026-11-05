@@ -152,7 +152,13 @@ deployment uses as its underlying
 (`CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC`). A Strata epoch
 manager can therefore point at this pool with no change of underlying token.
 
-`get_reserve(XLM)`:
+`get_reserve(XLM)` returns the full reserve struct. The table below records the
+fields a supplier cares about; the deployed struct also carries the interest-rate
+curve (`r_base`, `r_one`, `r_two`, `r_three`, `reactivity`), `ir_mod`,
+`backstop_credit` and `last_time`. The interface must declare all of them: a
+Soroban struct decodes as an exact field set, so the partial transcription used
+by the first adapter build failed at construction with `UnexpectedSize` when it
+was pointed at this pool on 2026-11-05.
 
 | Field | Value | Meaning |
 | --- | --- | --- |
