@@ -6,6 +6,11 @@ file is a production-readiness claim.
 
 ## 2026-11-06
 
+- **docs:** add [`docs/glossary.md`](docs/glossary.md), plain-English
+  definitions of the tranche, vault and Soroban terms the rest of the docs use
+  without defining — including the cushion as `J - I`, the deposit gating
+  ratio, SAC, TTL and stroop — and link it from the README documentation table.
+  Markdown only; no behaviour, spec or payout change.
 - **docs:** analyse settlement ordering around maturity
   (`docs/analysis/settlement-ordering.md`, issue #9) and pin it with eight tests
   in `tests/src/settlement_ordering.rs`. A senior deposit accepted in the final

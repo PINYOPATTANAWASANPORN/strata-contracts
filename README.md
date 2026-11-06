@@ -300,6 +300,7 @@ Security reports go through [`SECURITY.md`](SECURITY.md), not a public issue.
 | Document | What is in it |
 | --- | --- |
 | [`docs/waterfall-spec.md`](docs/waterfall-spec.md) | The settlement math and its five invariants. Source of truth. |
+| [`docs/glossary.md`](docs/glossary.md) | Plain-English definitions of the tranche, vault and Soroban terms used in these docs. |
 | [`docs/architecture.md`](docs/architecture.md) | Layout, data flow, storage, authorisation. |
 | [`docs/risks.md`](docs/risks.md) | Risk register, including four realised bugs. |
 | [`docs/analysis/settlement-ordering.md`](docs/analysis/settlement-ordering.md) | Who may call each transition, what the ledger clock allows, and what ordering around maturity is worth. |
