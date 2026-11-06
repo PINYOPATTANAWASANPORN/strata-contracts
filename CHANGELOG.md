@@ -6,15 +6,26 @@ file is a production-readiness claim.
 
 ## 2026-11-06
 
+- **feat:** the Blend adapter is deployed against the real testnet Blend pool
+  (`CCEBVDYM…`) with its own epoch manager, recorded in
+  `deployments/testnet-blend.json` and produced by
+  `scripts/deploy-testnet-blend.sh`. One 300-second epoch settled end to end:
+  2 XLM in, 20 000 451 stroops out, so **451 stroops of yield**; the senior took
+  its 4-stroop target and the junior the remaining 447, matching
+  `docs/waterfall-spec.md` recomputed independently. The adapter was built on
+  2026-11-05, before `refresh()` merged, so it has no `refresh()` and a build of
+  the current tree is a different Wasm; the record states what ran, not what the
+  tree builds today. `README.md` and risk entries B1–B7 now say that one testnet
+  epoch has run, and what it does and does not prove.
 - **feat:** `scripts/verify-deployment.sh` now verifies **every**
   `deployments/testnet*.json` record, not only `testnet.json`: each recorded
   contract must exist on chain, the ledger's Wasm hash must match the recorded
   `wasm_sha256`, and one read-only view call per contract must answer. The
   records are parsed as JSON, so the `contract_id` nested under `token` or
   `blend_pool` is not mistaken for a deployment, and `--rebuild` compares the
-  local artefacts with every record. Today it checks `testnet.json` and
-  `testnet-blend-refresh.json`; a new record needs no change here. No Blend
-  adapter deployment record is committed yet.
+  local artefacts with every record. Today it checks `testnet.json`,
+  `testnet-blend-refresh.json` and `testnet-blend.json`; a new record needs no
+  change here.
 - **ci:** the `docs are current` job runs `verify-deployment.sh --self-test`,
   which was an acceptance criterion of issue #5 that PR #22 did not wire up.
   The self-test is extended to cover the parser and every committed record.

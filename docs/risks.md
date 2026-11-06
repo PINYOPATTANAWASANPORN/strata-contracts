@@ -146,9 +146,11 @@ malicious `HostileVault` across every callback and fault mode:
 
 Risks B1–B7 were identified by the research in
 [design/blend-adapter.md](design/blend-adapter.md) §8. They are recorded here now
-that there is code behind them. The adapter exists and is tested against a test
-double; **none of it has been run against a real pool on a network**, so nothing
-here is mitigated in the sense a depositor would need.
+that there is code behind them. The adapter exists, is tested against a test
+double, and has been deployed against the real testnet Blend pool, where it
+settled one 300-second epoch ([deployment.md](deployment.md)). One epoch is
+plumbing, not evidence about liquidity, losses or a hostile pool, so nothing here
+is mitigated in the sense a depositor would need.
 
 ### B1 — The Blend pool is a third party — **High, open**
 
@@ -181,7 +183,7 @@ end to end against the pool double
 state machine's half is known; whether a real pool has the liquidity remains
 unknown.
 
-### B3 — A silent partial withdrawal — **Medium, mitigation built, untested against the real pool**
+### B3 — A silent partial withdrawal — **Medium, mitigation built, not exercised by a real clamp**
 
 Blend clamps an over-sized withdrawal instead of rejecting it: it burns what
 there is, pays what that is worth, and reports success. A vault that trusted the
@@ -194,9 +196,10 @@ drives this using a *deliberately unfaithful* pool double, because a correct
 adapter asking for exactly what the pool reported can never trigger the real
 clamp. The double's clamp itself is tested in `blend-pool-mock`.
 
-*Open:* the check has never been exercised against Blend's real behaviour on a
-network. A clamp that lands on exactly the computed amount would still be
-indistinguishable from success. The property tests in
+*Open:* the check ran during one real redemption on testnet (2026-11-05) and did
+not fire, because the pool paid in full; whether Blend's clamp behaves as read on
+a network is still unproven. A clamp that lands on exactly the computed amount
+would also be indistinguishable from success. The property tests in
 `tests/src/blend_adapter_props.rs` pin the adapter's side of the arithmetic
 against the faithful double — neither a deposit nor a redemption creates value
 through rounding — but they cannot test the real clamp.
@@ -261,9 +264,10 @@ address is the token the rest of Strata means by XLM.
 
 ### B7 — Testnet is not a market — **Low, documented**
 
-The testnet pool is driven by a mock oracle and test actors. An epoch run
-through it would prove the plumbing and nothing about liquidity or losses under
-real conditions.
+The testnet pool is driven by a mock oracle and test actors. One epoch has now
+been run through it (2026-11-05, 451 stroops of yield), and that proves the
+plumbing and nothing about liquidity, losses or adversarial behaviour under real
+conditions.
 
 *Mitigation:* the design note says so, and this entry exists so a passing
 testnet epoch cannot be read as evidence of anything else.
