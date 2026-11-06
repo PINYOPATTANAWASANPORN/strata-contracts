@@ -18,8 +18,9 @@ doctest = false
 
 [features]
 # Required by the integration tests in `tests/`, which register this contract
-# with `env.register`. Empty on purpose: it only flips on soroban-sdk/testutils.
-testutils = []
+# with `env.register` and read the user-position TTL through the SDK's testutils
+# storage trait.
+testutils = ["soroban-sdk/testutils"]
 
 [dependencies]
 soroban-sdk = { workspace = true }

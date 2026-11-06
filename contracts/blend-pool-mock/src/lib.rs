@@ -54,6 +54,8 @@
 
 #![no_std]
 
+#[cfg(feature = "testutils")]
+use soroban_sdk::testutils::storage::Persistent as _;
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, panic_with_error, token, Address, Env,
     Map, Vec,
@@ -98,6 +100,11 @@ pub enum Error {
 
 /// Pool statuses that block supply. 4 is frozen; 5 and 6 are setup states.
 const SUPPLY_BLOCKED_STATUSES: [u32; 3] = [4, 5, 6];
+
+/// Blend's user-position TTL, from `pool/src/storage.rs`: about 100 days before
+/// it is worth extending, about 120 days of life once it is. A ledger is 5 s.
+const USER_POSITION_THRESHOLD: u32 = 1_728_000;
+const USER_POSITION_BUMP: u32 = 2_073_600;
 
 #[contracttype]
 pub enum DataKey {
@@ -233,6 +240,24 @@ impl MockPool {
     /// The pool's real token balance.
     pub fn token_balance(env: Env) -> i128 {
         token::Client::new(&env, &load_asset(&env)).balance(&env.current_contract_address())
+    }
+
+    /// The ledger at which the pool's entry for `account` will expire.
+    ///
+    /// The real pool does not expose this, but its `get_user_positions` extends
+    /// the entry on every read, and that is the behaviour the adapter's
+    /// `refresh()` depends on. Exposing the result lets a test assert that a
+    /// read actually moved it.
+    ///
+    /// Testutils only: reading an entry's TTL needs the SDK's test-host storage
+    /// trait, which has no place in a contract.
+    #[cfg(feature = "testutils")]
+    pub fn position_live_until(env: Env, account: Address) -> u32 {
+        env.ledger().sequence()
+            + env
+                .storage()
+                .persistent()
+                .get_ttl(&DataKey::Position(account))
     }
 }
 
@@ -416,11 +441,17 @@ fn withdraw(env: &Env, from: &Address, to: &Address, amount: i128) {
 
 fn positions_of(env: &Env, account: &Address) -> Positions {
     let mut supply = Map::new(env);
-    let tokens: i128 = env
-        .storage()
-        .persistent()
-        .get(&DataKey::Position(account.clone()))
-        .unwrap_or(0);
+    let key = DataKey::Position(account.clone());
+    let stored: Option<i128> = env.storage().persistent().get(&key);
+    // Blend extends the user entry's TTL on every read. Without this the
+    // adapter's refresh would look harmless here and do nothing on a network.
+    // A missing entry has nothing to extend, so only touch one that exists.
+    if stored.is_some() {
+        env.storage()
+            .persistent()
+            .extend_ttl(&key, USER_POSITION_THRESHOLD, USER_POSITION_BUMP);
+    }
+    let tokens = stored.unwrap_or(0);
     // A zero position is stored as no key, matching the pool's own behaviour of
     // dropping empty entries.
     if tokens > 0 {

@@ -1,0 +1,47 @@
+{
+  "network": "testnet",
+  "network_passphrase": "Test SDF Network ; September 2015",
+  "measured_at_utc": "2026-11-05",
+  "purpose": "Task A3 probe: a real Blend adapter position, a permissionless refresh call, and the pool entry's live-until ledger before and after.",
+  "audited": false,
+  "warning": "UNAUDITED TESTNET SOFTWARE. Do not use real funds.",
+  "stellar_cli_version": "28.1.0",
+  "soroban_sdk_version": "27.0.6",
+  "contracts": {
+    "blend_adapter": {
+      "contract_id": "CCBPPPH6T42DQ5BVANHVQYXZRI2NBMVYLKR67HA6B3KJSBCOJPHHBYBQ",
+      "wasm_sha256": "dbf5a1f45091d4a8fd94aea604163c2e2b7539cc9f168b6b56fd6db9e525a80a",
+      "wasm_bytes": 20176,
+      "wasm_sha256_matches_local_build": true,
+      "wasm_install_tx": "bc621662028626f1cfd8bcd364a38d2e2533f91a72179e56c800f65ee16407b6",
+      "deployment_tx": "3588f1bf19de5cfa493751eacafbc78326d8f9b3c19b6bce68fdccd6ee9dc0c0",
+      "manager": "GC6A5FQOXIVRYYOQACUVFIK4BUQCC3LCR75XKJFQOD5HFL6IWD3MVHRS",
+      "pool": "CCEBVDYM32YNYCVNRXQKDFFPISJJCV557CDZEIRBEE4NCV4KHPQ44HGF",
+      "asset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+    }
+  },
+  "deposit": {
+    "assets": 10000000,
+    "b_tokens": 3828915,
+    "tx": "dbb221d9be1ba9762df2bb14831c307520d53d82daf3fb834a6793d4c108f99f",
+    "ledger": 5569344
+  },
+  "refresh": {
+    "caller": "GBM3RS65VIHM24D3AKNEC7ZLVBZCNCVB5WRBAGA7JOXLELFGEWC34AO6",
+    "caller_is_manager": false,
+    "tx": "dc85f5c54a50da726470d5acab8dc5415197c97b198dae4bb917652d6f23e78d",
+    "ledger": 5569359,
+    "last_refreshed_before": 5569344,
+    "last_refreshed_after": 5569359
+  },
+  "pool_position_entry": {
+    "key": "PoolDataKey::Positions(adapter)",
+    "live_until_before": 7642944,
+    "live_until_after": 7642944,
+    "ledgers_moved": 0,
+    "extension_observed": false,
+    "remaining_ledgers_at_refresh": 2073585,
+    "remaining_days_at_refresh": 120.0,
+    "explanation": "Blend's get_user_positions extends a user entry only when its remaining life is below the ~100-day threshold (1,728,000 ledgers). This entry had ~120 days left, so the read was a no-op. The refresh call itself succeeded and is recorded by last_refreshed. TTL extension remains unproven until the same measurement is taken on an entry within the threshold."
+  }
+}
