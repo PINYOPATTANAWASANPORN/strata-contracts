@@ -46,9 +46,11 @@ sets by hand. There is no real yield source integrated. A second vault —
 [`contracts/blend-adapter`](contracts/blend-adapter), which supplies to a real
 Blend lending pool — is built and tested against a pool test double, including
 full epochs driven by the real epoch manager through good, flat, loss and
-liquidity-limited settlements. It has not been deployed and has never been run
-against a real pool, so the sentence above still describes everything that runs
-today. See [risks.md](docs/risks.md) B1–B7.
+liquidity-limited settlements. It has also been deployed on Stellar testnet
+against the real Blend pool and has settled one 300-second epoch — 2 XLM in,
+20 000 451 stroops out, so 451 stroops of yield — documented in
+[`docs/deployment.md`](docs/deployment.md). That run proves the plumbing only;
+it says nothing about liquidity or losses. See [risks.md](docs/risks.md) B1–B7.
 
 ## Architecture
 
@@ -133,7 +135,7 @@ above were run against this tree.
 stellar contract build
 # -> target/wasm32v1-none/release/strata_epoch_manager.wasm   (25964 bytes)
 # -> target/wasm32v1-none/release/strata_mock_vault.wasm     ( 9638 bytes)
-# -> target/wasm32v1-none/release/strata_blend_adapter.wasm  (size not recorded)
+# -> target/wasm32v1-none/release/strata_blend_adapter.wasm  (21345 bytes)
 ```
 
 `cargo build` does **not** produce a deployable contract. The Soroban runtime only
@@ -190,6 +192,25 @@ by the script rather than read back from the contract:
 In both, the two payouts summed to `V` to the stroop. Transaction hashes are in
 [`docs/deployment.md`](docs/deployment.md).
 
+### The Blend adapter deployment
+
+Separately, the Blend adapter runs against the real testnet Blend pool with its
+own epoch manager. The mock-vault deployment above is untouched.
+
+| Contract | Address |
+| --- | --- |
+| `blend-adapter` | `CBJIQYHM5SIXY3QMT7X6ARQUPUWSNH3EZ5T3JOILETKBXR6SPWFKAKXI` |
+| `epoch-manager` (Blend) | `CALMXJCAKZALDPYFFBWQNUSBAHUM7HIL5NSITX7FYUEUSYN4Y4CSFPVT` |
+| Blend pool | `CCEBVDYM32YNYCVNRXQKDFFPISJJCV557CDZEIRBEE4NCV4KHPQ44HGF` |
+
+One 300-second epoch settled end to end: 2 XLM in, 20 000 451 stroops out. The
+yield was **451 stroops**; the senior took its 4-stroop target and the junior the
+remaining 447, exactly as [`docs/waterfall-spec.md`](docs/waterfall-spec.md)
+recomputed independently gives. The deployed adapter predates `refresh()`. The
+record is
+[`deployments/testnet-blend.json`](deployments/testnet-blend.json); the full run
+is in [`docs/deployment.md`](docs/deployment.md).
+
 Testnet is reset periodically by SDF, so these addresses are only meaningful
 until the next reset.
 
@@ -205,12 +226,12 @@ Marked **Done** only where the work was actually run and checked.
 | `contracts/vault-interface` | **Done** | The ERC-4626 subset, plus `asset` and `balance_of`. No tests of its own. |
 | `contracts/mock-vault` | **Done** | Test double, admin-set signed yield. 21 tests. |
 | `contracts/epoch-manager` | **Done** | Epoch lifecycle, deposits, settlement, claims. 18 tests. |
-| `contracts/blend-pool-interface` | **Done** | The Blend pool subset the adapter calls. Shapes read from Blend's source; not yet checked against a deployed pool. |
+| `contracts/blend-pool-interface` | **Done** | The Blend pool subset the adapter calls. Shapes checked against the deployed testnet pool by a successful deployment and epoch. |
 | `contracts/blend-pool-mock` | **Done** | Pool test double. 12 tests. Never deployed. |
-| `contracts/blend-adapter` | **In progress** | Core built, Wasm builds, 23 tests against the double. **Not deployed, never run against a real pool.** TTL refresh and the testnet deployment are not done. |
+| `contracts/blend-adapter` | **Testnet, unaudited** | 23 tests against the double; deployed against the real testnet Blend pool on 2026-11-05 and settled one 300-second epoch. That deployment predates `refresh()`. No audit. |
 | Cross-contract tests | **Done** | 30 tests over manager + vault + a real token. |
 | CI | **Done** | fmt, clippy, test, wasm build, spec consistency, audit. |
-| Testnet deployment | **Done** | Two epochs settled and checked against the spec. |
+| Testnet deployment | **Done** | Two mock-vault epochs and one Blend-adapter epoch settled and checked against the spec. |
 | `docs/architecture.md`, `docs/risks.md` | **Done** | Data flow and authorisation; working risk register. |
 | TTL audit for per-user positions (R9) | **Planned** | Open. Issue #10. |
 | External audit | **Planned** | Not requested. Issue #6. |
