@@ -42,8 +42,10 @@
 //! roughly 120 days reads back as *empty* rather than as an error, and a Strata
 //! epoch may run for 365 days. The adapter therefore keeps a record of what the
 //! pool last told it it held, and refuses to value or redeem a position the
-//! pool has forgotten. [`Error::PositionMissing`] is that refusal. Making the
-//! position survive is a separate, unsolved problem — see `docs/risks.md`.
+//! pool has forgotten. [`Error::PositionMissing`] is that refusal. [`refresh`]
+//! is a permissionless way to touch the pool's entry before that happens;
+//! running a keeper is still an operational obligation, not something this
+//! contract can enforce. See `docs/risks.md` B4.
 //!
 //! # Deliberately absent
 //!
@@ -130,6 +132,9 @@ pub enum DataKey {
     TotalShares,
     /// Adapter shares held by one account.
     ShareBalance(Address),
+    /// The ledger sequence at which the pool position was last read. Zero until
+    /// the first deposit or refresh.
+    LastRefreshed,
 }
 
 /// Topics: `deposit`, the receiver. Data: the amounts moved.
@@ -189,12 +194,14 @@ impl BlendAdapter {
         s.set(&DataKey::Manager, &manager);
         s.set(&DataKey::RecordedBTokens, &0_i128);
         s.set(&DataKey::TotalShares, &0_i128);
+        s.set(&DataKey::LastRefreshed, &0_u32);
         for key in [
             DataKey::Pool,
             DataKey::Asset,
             DataKey::Manager,
             DataKey::RecordedBTokens,
             DataKey::TotalShares,
+            DataKey::LastRefreshed,
         ] {
             s.extend_ttl(&key, BUMP_THRESHOLD, BUMP_AMOUNT);
         }
@@ -223,6 +230,37 @@ impl BlendAdapter {
     pub fn total_shares(env: Env) -> i128 {
         total_shares(&env)
     }
+
+    /// Reads the pool's record of this adapter's position, extending that
+    /// entry's TTL, without moving any funds. Returns the ledger sequence the
+    /// read happened at.
+    ///
+    /// Permissionless on purpose: a position that expires is worth nothing to
+    /// its owner, and anyone able to pay the fee should be able to prevent it.
+    /// The read is the whole mechanism. Blend extends the TTL of a user entry
+    /// when it loads it, and a contract cannot extend another contract's
+    /// entry directly, so calling `get_positions` is the only way to renew it.
+    ///
+    /// This must be a transaction. A simulated or read-only call does not
+    /// persist the extension, so a keeper has to submit it.
+    ///
+    /// Traps with [`Error::PositionMissing`] if the adapter recorded a position
+    /// the pool no longer recognises, rather than reporting a successful
+    /// refresh for an entry that is already gone.
+    pub fn refresh(env: Env) -> u32 {
+        let _ = read_position_and_refresh(&env);
+        load_last_refreshed(&env)
+    }
+
+    /// The ledger sequence at which the pool position was last read through
+    /// this contract, or zero if it never has been.
+    ///
+    /// A keeper that calls the pool's `get_positions` directly extends the same
+    /// entry without appearing here, so this is a record of the adapter's own
+    /// calls, not of every touch.
+    pub fn last_refreshed(env: Env) -> u32 {
+        load_last_refreshed(&env)
+    }
 }
 
 #[contractimpl]
@@ -247,17 +285,15 @@ impl VaultInterface for BlendAdapter {
         }
 
         let supply_before = total_shares(&env);
-        let snapshot = position_snapshot(&env);
-        let recorded = load_recorded(&env);
+        // This is the same read `refresh()` performs: it touches the pool's
+        // position entry and records the ledger. A deposit should not have to
+        // rely on a keeper to keep the entry it is about to add to alive.
+        let (snapshot, live_value) = read_position_and_refresh(&env);
 
         // With no shareholders outstanding there is nobody to protect, so a
         // stale record is corrected rather than treated as a lost position. The
         // pool's own report overwrites it below.
-        let assets_before = if supply_before == 0 {
-            0
-        } else {
-            live_assets(&env, recorded, &snapshot)
-        };
+        let assets_before = if supply_before == 0 { 0 } else { live_value };
 
         let shares = if supply_before == 0 {
             // First depositor defines the share price at 1:1.
@@ -340,8 +376,9 @@ impl VaultInterface for BlendAdapter {
             panic_with_error!(&env, Error::InsufficientShares);
         }
 
-        let snapshot = position_snapshot(&env);
-        let total = live_assets(&env, load_recorded(&env), &snapshot);
+        // A redemption reads the position too, so it records and refreshes it
+        // exactly as a deposit does.
+        let (snapshot, total) = read_position_and_refresh(&env);
         let assets = mul_div(&env, shares, total, supply_before);
 
         // Effects first: the shares are gone before anything leaves.
@@ -464,6 +501,22 @@ fn live_total_assets(env: &Env) -> i128 {
     live_assets(env, load_recorded(env), &snapshot)
 }
 
+/// Reads the position, checks it is still ours, and records the ledger.
+///
+/// The read is what extends the TTL of the pool's own entry; the record tells
+/// an operator when that last happened. Every path that touches the position
+/// goes through here, so "last refreshed" cannot drift from "last read".
+fn read_position_and_refresh(env: &Env) -> (Snapshot, i128) {
+    let snapshot = position_snapshot(env);
+    let value = live_assets(env, load_recorded(env), &snapshot);
+    let ledger = env.ledger().sequence();
+    env.storage()
+        .persistent()
+        .set(&DataKey::LastRefreshed, &ledger);
+    bump(env, &DataKey::LastRefreshed);
+    (snapshot, value)
+}
+
 fn supply_request(env: &Env, asset: &Address, amount: i128) -> Vec<Request> {
     let mut requests = Vec::new(env);
     requests.push_back(Request {
@@ -583,6 +636,13 @@ fn load_recorded(env: &Env) -> i128 {
     env.storage()
         .persistent()
         .get(&DataKey::RecordedBTokens)
+        .unwrap_or(0)
+}
+
+fn load_last_refreshed(env: &Env) -> u32 {
+    env.storage()
+        .persistent()
+        .get(&DataKey::LastRefreshed)
         .unwrap_or(0)
 }
 

@@ -212,11 +212,22 @@ pool reported and refuses to value or redeem a position the pool has stopped
 recognising, so the failure is loud (`PositionMissing`) rather than a silent
 zero. That detects the loss; it does not prevent it.
 
-*Open:* nothing keeps the entry alive. There is no `refresh()` entry point and no
-keeper, and the safe epoch length has **not** been measured — the ~120 days above
-comes from reading Blend's source, not from a test. Until a call is proven on a
-network to extend the entry's TTL, any epoch longer than that figure is relying
-on unverified behaviour.
+A permissionless `refresh()` now reads the pool's `get_positions`, the call that
+renews the pool's own entry, and records the ledger in `last_refreshed`;
+`deposit` and `redeem` go through the same read. It cannot extend the entry
+itself — the entry belongs to the pool — so the pool's own read is the
+mechanism.
+
+*Open:* the extension has **not** been observed. On 2026-11-05 a real adapter
+position was refreshed on testnet from an identity that was not the manager: the
+call succeeded, `last_refreshed` moved 5 569 344 → 5 569 359, and the pool
+entry's live-until ledger stayed at 7 642 944 before and after. The entry was
+created with 2 073 600 ledgers (120.0 days) of life and still had ~119 days left
+at the refresh, above Blend's ~100-day extension threshold, so the read was a
+no-op by design. The measured lifetime of a fresh entry is 120.0 days; a safe
+epoch length longer than that remains unproven, and a keeper is still required.
+Re-running the measurement on an entry within ~100 days of expiry is what would
+close the proof gap.
 
 ### B5 — Rounding dust — **Low, open**
 
@@ -259,22 +270,62 @@ testnet epoch cannot be read as evidence of anything else.
 
 ## State and operations
 
-### R9 — Storage expiry — **Medium**
+### R9 — Storage expiry — **Low, audited (persistent entries archive rather than vanish, but expire before max term without upkeep/restoration)**
 
-A Soroban persistent entry that expires is *silently missing*, not an error.
-Losing a `Position` entry would make a depositor's principal unreadable and
-their claim impossible.
+An earlier version of this entry stated that an expired Soroban persistent entry
+is *silently missing*. That is only true of `temporary()` storage (and of
+Blend's user position in B4). Every entry in `epoch-manager` and `mock-vault`
+is stored in `persistent()` storage: when a persistent entry's TTL reaches zero
+it moves to the **archived** state in the ledger's BucketList / Hot Archive,
+not to `None`. An archived entry cannot be read until it is restored (either
+automatically by the transaction footprint in Protocol 23+ or explicitly with
+`stellar contract restore`), which costs rent but **never destroys principal**.
 
-*Mitigation:* every write bumps TTL with a long `BUMP_AMOUNT`. Positions are
-written on deposit and again on claim, and the epoch entry is written on every
-lifecycle transition.
+#### Storage TTL inventory (`epoch-manager` and `mock-vault`)
 
-*Open:* TTL is only extended when an entry is *touched*. A depositor who
-deposits and never claims has their position bumped at deposit time and then
-left alone for the length of `BUMP_AMOUNT`. If `BUMP_AMOUNT` in ledgers is
-shorter than the time to claim, the position can expire. **This needs a
-deliberate check against realistic ledger timings and a keeper or crontab if
-the numbers are close.** Not yet done.
+| Contract | Entry / Key | Storage type | Written when | Extended when & by whom | `BUMP_THRESHOLD` | `BUMP_AMOUNT` |
+| --- | --- | --- | --- | --- | --- | --- |
+| `epoch-manager` | Contract instance & Wasm | Instance / Code | Deploy | Externally via `scripts/extend-ttl-testnet.sh` (admin/keeper) | — | `500_000` ledgers (~28.9 days) per script run |
+| `epoch-manager` | `DataKey::Config` | Persistent | `__constructor` | `__constructor` only (`bump` in `lib.rs`); never re-written afterwards | `100_000` ledgers (~5.79 days) | `4_000_000` ledgers (~231.48 days) |
+| `epoch-manager` | `DataKey::Epoch` | Persistent | `create_epoch`, `deposit`, `settle`, `claim`, `close_epoch` | Every lifecycle write (`store_epoch` -> `bump`) by whoever submits the tx | `100_000` ledgers (~5.79 days) | `4_000_000` ledgers (~231.48 days) |
+| `epoch-manager` | `DataKey::Position(addr, tranche)` | Persistent | `deposit`, `claim` | `store_position` -> `bump` on the depositor's own `deposit` and `claim` only | `100_000` ledgers (~5.79 days) | `4_000_000` ledgers (~231.48 days) |
+| `mock-vault` | Contract instance & Wasm | Instance / Code | Deploy | Externally via `scripts/extend-ttl-testnet.sh` | — | `500_000` ledgers (~28.9 days) per script run |
+| `mock-vault` | `Admin`, `Asset`, `TotalAssets`, `TotalShares`, `RateBps`, `LastAccrualTs`, `ShareBalance(addr)` | Persistent | `__constructor`, `set_yield_rate`, `accrue`, `deposit`, `redeem` | **Never explicitly extended in contract code** (no `extend_ttl` calls in `mock-vault`); receives only the network's `min_persistent_entry_ttl` (`4_096` ledgers in SDK defaults, ~120 days on testnet) | None | None |
+
+#### Wall-clock comparison (at measured 5 seconds / ledger)
+
+| Quantity | Ledgers (at 5 s / ledger) | Wall-clock time |
+| --- | --- | --- |
+| `BUMP_THRESHOLD` (`epoch-manager`) | `100_000` | `500_000` s (**5.79 days**) |
+| `BUMP_AMOUNT` (`epoch-manager`) | `4_000_000` | `20_000_000` s (**231.48 days**) |
+| Soroban default `max_entry_ttl` (Protocol 23+) | `6_312_000` | `31_560_000` s (**365.28 days**) |
+| Maximum epoch term (`MAX_TERM_SECONDS`) | `6_307_200` | `31_536_000` s (**365.00 days**) |
+| Max epoch term + 30-day claim window | `6_825_600` | `34_128_000` s (**395.00 days**) |
+
+#### Statement on whether a position can expire before it is claimed
+
+**Yes.** At the measured 5-second testnet ledger cadence, `BUMP_AMOUNT = 4_000_000`
+ledgers is **231.48 days**, whereas the maximum permitted epoch term is **365 days**
+(`6_307_200` ledgers). A depositor who deposits at `t = 0` into an epoch whose
+term exceeds `20_000_000` seconds (~231.48 days) — or who waits past day 231 to
+claim — will have their `DataKey::Position(addr, tranche)` entry (as well as
+`DataKey::Config`, which is only written in `__constructor`) reach `TTL = 0` and
+archive **133.52 days before maturity**, and **163.52 days before the end of a
+30-day post-maturity claim window**. In addition, because `extend_ttl` clamps to
+the network's `max_entry_ttl` (~365.28 days), no single deposit-time bump can
+cover a 365-day epoch plus a 30-day claim window (`6_825_600` ledgers) without
+an intermediate renewal or restoration at claim time.
+
+*Evidence:* pinned in `contracts/epoch-manager/src/test.rs` by:
+- `storage_entries_record_expected_initial_ttls_across_manager_and_vault`
+- `position_ttl_only_extends_once_remaining_life_reaches_bump_threshold`
+- `position_archived_past_bump_amount_in_max_term_epoch_is_restored_and_claimable`
+
+*How archival and restoration work in practice:* because `Position`, `Epoch`,
+and `Config` are `persistent()` entries, archival does not lose the depositor's
+principal. Under Protocol 23+ (Stellar CLI 28 / `soroban-sdk` 27), simulating
+`claim` or restoring the entry via `stellar contract restore` brings the entry
+back into live storage (see [`architecture.md`](architecture.md#storage-layout)).
 
 ### R10 — The admin can choose epoch terms — **Medium**
 
