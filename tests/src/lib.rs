@@ -28,3 +28,6 @@ pub mod blend_adapter_integration;
 
 #[cfg(test)]
 pub mod hostile_vault_test;
+
+#[cfg(test)]
+pub mod settlement_ordering;
