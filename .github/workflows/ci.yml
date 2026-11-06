@@ -173,6 +173,12 @@ jobs:
       - name: The deploy script refuses non-testnets
         run: ./scripts/deploy-testnet.sh --self-test
 
+      # The verifier's offline half: the network guard, the JSON record parser
+      # (including the records committed today) and the two distinct failure
+      # classifications. It needs no network, no keys and no Stellar CLI.
+      - name: The deployment verifier is sound
+        run: ./scripts/verify-deployment.sh --self-test
+
       # Branch protection is set by a maintainer from a script, not by this
       # repository, so the one thing CI can usefully do is prove the script still
       # refuses the wrong repository and still names every job in this file.
