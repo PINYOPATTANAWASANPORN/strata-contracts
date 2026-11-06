@@ -4,6 +4,21 @@ Notable changes to this repository, newest first. Dates are the date the change
 landed, not a release date. Strata is unaudited and testnet-only; nothing in this
 file is a production-readiness claim.
 
+## 2026-11-06
+
+- **feat:** `scripts/verify-deployment.sh` now verifies **every**
+  `deployments/testnet*.json` record, not only `testnet.json`: each recorded
+  contract must exist on chain, the ledger's Wasm hash must match the recorded
+  `wasm_sha256`, and one read-only view call per contract must answer. The
+  records are parsed as JSON, so the `contract_id` nested under `token` or
+  `blend_pool` is not mistaken for a deployment, and `--rebuild` compares the
+  local artefacts with every record. Today it checks `testnet.json` and
+  `testnet-blend-refresh.json`; a new record needs no change here. No Blend
+  adapter deployment record is committed yet.
+- **ci:** the `docs are current` job runs `verify-deployment.sh --self-test`,
+  which was an acceptance criterion of issue #5 that PR #22 did not wire up.
+  The self-test is extended to cover the parser and every committed record.
+
 ## 2026-11-05
 
 - **feat:** add a permissionless `refresh()` to the Blend adapter that reads the

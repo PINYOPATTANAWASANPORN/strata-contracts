@@ -36,21 +36,38 @@ The machine-readable record, written by the deploy script, is
 holds. For both contracts it matched the sha256 of the locally built artefact
 exactly, so the deployed code is the code in this repository at this commit.
 
-You can re-verify the recorded deployment against the live ledger at any time:
+You can re-verify every recorded deployment against the live ledger at any time.
+`scripts/verify-deployment.sh` checks **every** `deployments/testnet*.json`
+record, not a hardcoded list: for each contract it records, the contract must
+exist on chain, the ledger's Wasm hash must equal the recorded `wasm_sha256`, and
+one read-only view function must answer. Today that is `testnet.json` and
+`testnet-blend-refresh.json`; a new record is picked up with no code change.
 
 ```bash
-# Check on-chain wasm hashes against deployments/testnet.json and call one
-# read-only view function per contract (total_assets and current_epoch):
+# Check on-chain wasm hashes for every record and call one read-only view
+# function per contract (total_assets and current_epoch):
 ./scripts/verify-deployment.sh
 
-# Also rebuild locally with 'stellar contract build' and verify that the local
-# Wasm artefacts match deployments/testnet.json:
+# Also rebuild locally with 'stellar contract build' and compare the local Wasm
+# artefacts with each record. A record written before a contract changed will
+# report a hash mismatch, which is the intended signal: the deployed code is not
+# the code in this tree.
 ./scripts/verify-deployment.sh --rebuild
 
 # Run the offline self-test (network guard, JSON parser, and distinct failure
-# codes for "contract not found" vs "hash mismatch"):
+# codes for "contract not found" vs "hash mismatch"). CI runs this on every push:
 ./scripts/verify-deployment.sh --self-test
 ```
+
+Exit codes are `0` (all good), `1` (usage, guard, parser, build or view-call
+failure), `2` (a recorded contract is not on the ledger) and `3` (a Wasm sha256
+mismatch, either on-chain or against a local build). Records are checked in
+filename order and the first failure sets the exit code.
+
+The records are parsed as JSON rather than grepped, because a record also
+carries a `contract_id` inside `token` and inside `blend_pool`; those are
+addresses to check by eye, not deployed contracts. That needs a working
+`python3` (or `python`), which the script probes by running it.
 
 ### Why the wasm is smaller than the old hand-built numbers
 
@@ -74,6 +91,7 @@ the most because it carries a large spec for thirteen functions.
 | Stellar CLI | 28.1.0 | prebuilt binary from the official releases page |
 | `bash` | 5.x | the scripts are POSIX-ish bash |
 | `sha256sum` or `shasum` | either | the deploy script needs one of them |
+| `python3` (or `python`) | 3.8+ | `verify-deployment.sh` parses the deployment records as JSON; it probes the interpreter by running it, because on Windows `python3` can be the Microsoft Store stub |
 
 soroban-sdk 27.0.6 built and ran correctly under CLI 28.1.0 against a protocol
 29 testnet. That is not the usual pairing — the CLI ships `stellar-xdr` 28.0.0
