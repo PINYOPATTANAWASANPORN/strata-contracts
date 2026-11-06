@@ -326,6 +326,14 @@ and falls when the pool socialises bad debt. The divisor is Blend v2's fixed
 `SCALAR_12`; `Reserve::scalar` is the asset's `10^decimals` and is not this
 scale.
 
+`refresh()` is permissionless and calls the pool's `get_positions`. The read is
+the mechanism: Blend extends its own user-position entry when it loads it, and a
+contract cannot extend another contract's entry. `last_refreshed` records the
+ledger of the last read through the adapter; deposit and redeem use the same
+path. On testnet on 2026-11-05 the call ran but did not move a fresh entry's
+live-until ledger, because the entry was still above the ~100-day extension
+threshold. See `docs/design/blend-adapter.md` §5 and risk B4.
+
 ### Events
 
 Both carry the same three amounts: what moved, and the pool position afterwards.
