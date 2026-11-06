@@ -346,6 +346,106 @@ it. The extension remains unproven; see `docs/design/blend-adapter.md` §5 and
 
 ---
 
+## The Blend adapter deployment
+
+A second deployment puts the Blend adapter in front of the real testnet Blend
+pool, driven by its own epoch manager. The mock-vault deployment above is
+untouched: different contracts, different manager, nothing shared but the
+underlying asset.
+
+| | |
+| --- | --- |
+| Deployed at | 2026-11-05T09:34:40Z |
+| Blend pool | `CCEBVDYM32YNYCVNRXQKDFFPISJJCV557CDZEIRBEE4NCV4KHPQ44HGF`, reserve index 0 |
+| Asset | `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC` (native XLM SAC) |
+| Adapter | `CBJIQYHM5SIXY3QMT7X6ARQUPUWSNH3EZ5T3JOILETKBXR6SPWFKAKXI` |
+| Epoch manager | `CALMXJCAKZALDPYFFBWQNUSBAHUM7HIL5NSITX7FYUEUSYN4Y4CSFPVT` |
+| Admin / deployer | `GC6A5FQOXIVRYYOQACUVFIK4BUQCC3LCR75XKJFQOD5HFL6IWD3MVHRS` |
+| Adapter Wasm | `90a0c36dd403da875f1d7ec5a7239835c803a949a9c52f50924ee3fa631c6a96`, 19 013 bytes |
+| Manager Wasm | `b12c8af8403df7478ee67f4e6dd292230236f086a4908894ef80d19417828f7a`, 25 964 bytes |
+| Reserve at deploy | `b_rate` 2 611 836 453 714, `b_supply` 529 006 914 354 115 |
+
+The machine-readable record is
+[`deployments/testnet-blend.json`](../deployments/testnet-blend.json), written by
+`scripts/deploy-testnet-blend.sh`. The wiring was read back from the ledger after
+deployment: the adapter reports `pool`, `asset` and `manager`, and the manager
+reports `vault`, `asset` and `admin`, all matching the table.
+
+### This adapter predates `refresh()`
+
+It was built on 2026-11-05, before the refresh entry point merged (PR #27, on
+2026-11-06), so the deployed Wasm has no `refresh()` and no `last_refreshed()`.
+A build of the current tree is `dbf5a1f4…`, 21 345 bytes, so comparing this
+record against a local build reports a hash mismatch. That is correct: the
+deployed code is not the code in this tree. The record is left as it is because
+it describes a real deployment that settled an epoch, and rewriting it would be
+a lie about what ran. A fresh run of `scripts/deploy-testnet-blend.sh` deploys
+the current adapter at new contract IDs.
+
+### The epoch, end to end
+
+One epoch was opened and settled on that deployment:
+`create_epoch(term_seconds = 300, rate_bps = 500, max_senior_ratio_bps = 10 000)`,
+then 1 XLM junior, 1 XLM senior, then `settle` after maturity.
+
+| Field | Stroops |
+| --- | --- |
+| senior principal | 10 000 000 |
+| junior principal | 10 000 000 |
+| `value_redeemed` | 20 000 451 |
+| `senior_payout` | 10 000 004 |
+| `junior_payout` | 10 000 447 |
+
+Recomputed from [`waterfall-spec.md`](waterfall-spec.md), independently of the
+contract:
+
+```text
+I             = (10 000 000 * 500 * 300) / (10 000 * 31 536 000) = 4 (truncated)
+senior_due    = 10 000 000 + I                                   = 10 000 004
+cushion       = J - I                                            =  9 999 996
+V             = 20 000 451 >= senior_due
+senior_payout = senior_due                                       = 10 000 004
+junior_payout = V - senior_due                                   = 10 000 447
+```
+
+Both figures match `current_epoch()` and the `settled_event`, and
+`senior_payout + junior_payout == V` exactly. The senior was capped at its
+target, the same behaviour the mock-vault `good` scenario shows.
+
+**How much yield accrued: 451 stroops.** The two deposits put 20 000 000
+stroops in and redemption returned 20 000 451, so the pool earned 451 stroops —
+0.0000451 XLM, 0.0023% of principal over 300 seconds. That is a real number from
+a real pool and it is tiny. The senior's target for the term was 4 stroops and it
+received exactly 4; the junior took the other 447. It says nothing about yield
+under any other conditions.
+
+The adapter mints shares at the position's current price, which is why the
+senior's 10 000 000 stroops bought 9 999 987 shares: it deposited second, after
+the position had already accrued.
+
+| Step | Ledger | Transaction |
+| --- | --- | --- |
+| adapter Wasm install | 5 569 513 | `ea1bba88b0d3615272464a208a450d4dd8037866d114bc8c1a83272034f1f001` |
+| adapter deploy | 5 569 515 | `155e09b58fac23f13bc574d9d709d71a72806a85c8451fac7eb52d1897aff905` |
+| manager deploy | 5 569 520 | `ad526fb994fd2750a0acfa846a43b1cc2b15b0dbb72602021fedbfc82965895d` |
+| `create_epoch` | 5 569 636 | `9bd76072bbc32decef2846055197a4b0a943e07dd08a54b3c44e4c03686a1eb5` |
+| junior deposit, 1 XLM (`GBJ5PVL7…`) | 5 569 649 | `2f072c96537870cf5b38aababc987cdd37eb8395d52ae57365c986a0923b3dce` |
+| senior deposit, 1 XLM (`GDOF7DQZ…`) | 5 569 654 | `a3dd76b9b9283156146ef3bbebeeea9d06dc984799dfa3f3ac672eb77b02136f` |
+| `settle` | 5 569 726 | `c514207a008cdf58793246c6712a78b2447f8dad12ad8248a36602207d04e347` |
+| senior claim | 5 569 733 | `b86be7e1e8489f5665e71fea0dfa874bff8fadf7223006bd48bcb11b838e0987` |
+| junior claim | 5 569 737 | `f7b3a6ef71b0b7abd0d3ecd300a14eb16f0e2c1d5315a4c6ff1902b311139c4d` |
+| `close_epoch` | 5 569 743 | `da61f89954246515147171fdd0edb72e62ddc26bccd3232e53bee4e35ac495d7` |
+
+Every hash was resolved on Horizon testnet, and the epoch rows are the manager's
+own `epoch_opened_event`, `deposit_event`, `settled_event`, `claim_event` and
+`epoch_closed_event` events, read from the RPC event stream.
+
+The pool is a third party on testnet, driven by a mock oracle; this run proves
+the plumbing and nothing about liquidity, losses or a hostile pool. See
+[`risks.md`](risks.md) B1–B7.
+
+---
+
 ## Known issues
 
 ### The CLI's simulation cache can produce an invalid footprint
