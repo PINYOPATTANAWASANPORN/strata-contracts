@@ -164,13 +164,14 @@ The deployment is live but **testnet is reset periodically by SDF**, which clear
 contracts and accounts. When that happens the recorded IDs stop existing.
 
 ```bash
-./scripts/verify-deployment.sh          # once issue #5 lands
+./scripts/verify-deployment.sh          # every deployments/testnet*.json record
 ./scripts/extend-ttl-testnet.sh         # extend the instances and Wasm
 ```
 
 `extend-ttl-testnet.sh` keeps the contract instances and their Wasm alive. It does
-**not** address risk R9 — a depositor's own position entry. That is issue #10 and
-it is still open.
+**not** address risk R9 — a depositor's own position entry. That is issue #10
+(closed by the TTL audit in #28), and the risk itself is still documented as open
+in [`risks.md`](risks.md).
 
 ## Secrets
 
