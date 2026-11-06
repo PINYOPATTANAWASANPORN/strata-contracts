@@ -1,0 +1,38 @@
+{
+  "network": "testnet",
+  "network_passphrase": "Test SDF Network ; September 2015",
+  "deployed_at_utc": "2026-11-05T09:34:40Z",
+  "stellar_cli_version": "28.1.0",
+  "soroban_sdk_version": "27.0.6",
+  "admin_public_address": "GC6A5FQOXIVRYYOQACUVFIK4BUQCC3LCR75XKJFQOD5HFL6IWD3MVHRS",
+  "audited": false,
+  "warning": "UNAUDITED TESTNET SOFTWARE. Do not use real funds.",
+  "blend_pool": {
+    "contract_id": "CCEBVDYM32YNYCVNRXQKDFFPISJJCV557CDZEIRBEE4NCV4KHPQ44HGF",
+    "reserve_index": 0,
+    "asset_contract_id": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+    "b_rate_at_deploy": "2611836453714",
+    "b_supply_at_deploy": "529006914354115"
+  },
+  "manager_salt": "aaad1b5341bcc59d48021e8f3c36228b1652b011d9c4059ce4f985fd4c9d681b",
+  "contracts": {
+    "blend_adapter": {
+      "contract_id": "CBJIQYHM5SIXY3QMT7X6ARQUPUWSNH3EZ5T3JOILETKBXR6SPWFKAKXI",
+      "wasm_sha256": "90a0c36dd403da875f1d7ec5a7239835c803a949a9c52f50924ee3fa631c6a96",
+      "wasm_bytes": 19013,
+      "deployment_txs": ["ea1bba88b0d3615272464a208a450d4dd8037866d114bc8c1a83272034f1f001", "155e09b58fac23f13bc574d9d709d71a72806a85c8451fac7eb52d1897aff905"],
+      "pool": "CCEBVDYM32YNYCVNRXQKDFFPISJJCV557CDZEIRBEE4NCV4KHPQ44HGF",
+      "asset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      "manager": "CALMXJCAKZALDPYFFBWQNUSBAHUM7HIL5NSITX7FYUEUSYN4Y4CSFPVT"
+    },
+    "epoch_manager": {
+      "contract_id": "CALMXJCAKZALDPYFFBWQNUSBAHUM7HIL5NSITX7FYUEUSYN4Y4CSFPVT",
+      "wasm_sha256": "b12c8af8403df7478ee67f4e6dd292230236f086a4908894ef80d19417828f7a",
+      "wasm_bytes": 25964,
+      "deployment_txs": ["ad526fb994fd2750a0acfa846a43b1cc2b15b0dbb72602021fedbfc82965895d"],
+      "vault": "CBJIQYHM5SIXY3QMT7X6ARQUPUWSNH3EZ5T3JOILETKBXR6SPWFKAKXI",
+      "asset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      "admin": "GC6A5FQOXIVRYYOQACUVFIK4BUQCC3LCR75XKJFQOD5HFL6IWD3MVHRS"
+    }
+  }
+}
