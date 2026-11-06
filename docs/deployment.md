@@ -40,8 +40,9 @@ You can re-verify every recorded deployment against the live ledger at any time.
 `scripts/verify-deployment.sh` checks **every** `deployments/testnet*.json`
 record, not a hardcoded list: for each contract it records, the contract must
 exist on chain, the ledger's Wasm hash must equal the recorded `wasm_sha256`, and
-one read-only view function must answer. Today that is `testnet.json` and
-`testnet-blend-refresh.json`; a new record is picked up with no code change.
+one read-only view function must answer. Today that is `testnet.json`,
+`testnet-blend-refresh.json` and `testnet-blend.json`; a new record is picked up
+with no code change.
 
 ```bash
 # Check on-chain wasm hashes for every record and call one read-only view
@@ -375,9 +376,10 @@ reports `vault`, `asset` and `admin`, all matching the table.
 
 It was built on 2026-11-05, before the refresh entry point merged (PR #27, on
 2026-11-06), so the deployed Wasm has no `refresh()` and no `last_refreshed()`.
-A build of the current tree is `dbf5a1f4…`, 21 345 bytes, so comparing this
-record against a local build reports a hash mismatch. That is correct: the
-deployed code is not the code in this tree. The record is left as it is because
+A build of the current tree is `dbf5a1f4…`, 21 345 bytes, so
+`./scripts/verify-deployment.sh --rebuild` reports a hash mismatch for this
+record and exits 3. That is correct: the deployed code is not the code in this
+tree. The record is left as it is because
 it describes a real deployment that settled an epoch, and rewriting it would be
 a lie about what ran. A fresh run of `scripts/deploy-testnet-blend.sh` deploys
 the current adapter at new contract IDs.
