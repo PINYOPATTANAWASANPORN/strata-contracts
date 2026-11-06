@@ -6,6 +6,17 @@ file is a production-readiness claim.
 
 ## 2026-11-06
 
+- **docs:** analyse settlement ordering around maturity
+  (`docs/analysis/settlement-ordering.md`, issue #9) and pin it with eight tests
+  in `tests/src/settlement_ordering.rs`. A senior deposit accepted in the final
+  ledger before maturity is paid a full term's target interest out of the
+  junior's payout: 200 000 deposited one second before maturity claims 220 000
+  at 10%/yr, and the junior receives 419 999 instead of 440 000. A junior
+  arriving then dilutes the earlier junior by the same amount. Settlement pays
+  its caller nothing; settling 30 days late moves +4 931 (at +10%/yr) or
+  −4 931 (at −10%/yr) to or from the junior and leaves the senior unchanged;
+  claim order decides one stroop of remainder. Filed as issue #32 and recorded
+  as risk R19. No contract, spec or payout change.
 - **feat:** the Blend adapter is deployed against the real testnet Blend pool
   (`CCEBVDYM…`) with its own epoch manager, recorded in
   `deployments/testnet-blend.json` and produced by
