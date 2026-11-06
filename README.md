@@ -243,18 +243,22 @@ Nothing in this table is placeholder code presented as finished. "Planned" and
 
 ### Tests
 
-**139 tests, all passing.** Counted by `cargo test --all --locked`, one `#[test]`
+**167 tests, all passing.** Counted by `cargo test --all --locked`, one `#[test]`
 per case:
 
 | Where | Tests | What it proves |
 | --- | --- | --- |
 | `contracts/waterfall/src/tests.rs` | 19 | the spec's worked examples and boundaries, by name |
 | `contracts/mock-vault/src/test.rs` | 21 | the yield model, so integration results mean something |
-| `contracts/epoch-manager/src/test.rs` | 18 | lifecycle transitions, bounds, who may do what |
+| `contracts/epoch-manager/src/test.rs` | 21 | lifecycle transitions, bounds, who may do what |
 | `tests/src/waterfall_props.rs` | 16 | all five spec invariants as properties |
 | `tests/src/integration.rs` | 30 | a real manager, vault and SEP-41 token, end to end |
+| `tests/src/settlement_ordering.rs` | 8 | what transaction ordering around maturity is worth: final-ledger deposits, settlement timing, claim remainder |
 | `contracts/blend-pool-mock/src/test.rs` | 12 | the pool double rounds, clamps, gates and expires the way Blend does |
-| `contracts/blend-adapter/src/test.rs` | 23 | every adapter function and error, against that double, plus the deposit auth tree |
+| `contracts/blend-adapter/src/test.rs` | 26 | every adapter function and error, against that double, plus the deposit auth tree |
+| `tests/src/blend_adapter_integration.rs` | 4 | full epochs through the real manager with the adapter as vault |
+| `tests/src/blend_adapter_props.rs` | 4 | adapter accounting properties against the pool double |
+| `tests/src/hostile_vault_test.rs` | 6 | reentrancy and fault modes of a hostile vault |
 | `contracts/vault-interface`, `contracts/blend-pool-interface` | 0 | trait declarations, nothing to test |
 
 Every settlement assertion in the integration tests is checked against
@@ -298,6 +302,7 @@ Security reports go through [`SECURITY.md`](SECURITY.md), not a public issue.
 | [`docs/waterfall-spec.md`](docs/waterfall-spec.md) | The settlement math and its five invariants. Source of truth. |
 | [`docs/architecture.md`](docs/architecture.md) | Layout, data flow, storage, authorisation. |
 | [`docs/risks.md`](docs/risks.md) | Risk register, including four realised bugs. |
+| [`docs/analysis/settlement-ordering.md`](docs/analysis/settlement-ordering.md) | Who may call each transition, what the ledger clock allows, and what ordering around maturity is worth. |
 | [`docs/deployment.md`](docs/deployment.md) | Testnet deployment, reproduction steps, known issues. |
 | [`docs/demo-runbook.md`](docs/demo-runbook.md) | Script for recording a walkthrough demo. |
 | [`docs/maintaining.md`](docs/maintaining.md) | Branch protection and release process. |

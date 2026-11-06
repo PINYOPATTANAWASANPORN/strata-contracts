@@ -75,6 +75,39 @@ suffer, pro-rata by principal.
 *Open:* not addressed. A per-depositor cost basis in the vault would be a
 significant redesign. Worth deciding deliberately before there is real money.
 
+### R19 — A deposit in the final ledger takes a full term of the waterfall — **Medium**
+
+Deposits stay open while `now < maturity_ts`, but the senior target is computed
+on the senior principal and the epoch's fixed term, with no time-weighting. A
+senior depositor who enters in the last ledger before maturity is paid a whole
+term's target out of `V`, and the difference comes from the junior. Measured at
+10%/yr with 400 000 junior and 200 000 senior: a second senior depositing
+200 000 one second before maturity claims 220 000, while the junior receives
+419 999 instead of 440 000 — 20 000 for one ledger of exposure. The junior side
+is the same mechanism through R5's pooling, ungated: a junior arriving in the
+final second took 20 001 of yield from the junior who funded the term. The vault
+share price is not the cause (the late deposit buys shares at the correct
+pre-deposit price), so this cannot be fixed in the vault.
+
+*Bound:* per epoch, by the senior room under the ratio gate and by the rate. The
+late depositor must leave the principal until settlement, and `close_epoch`
+keeps the manager to one epoch at a time, but there is no holding period, no
+per-depositor cap and no time-weighting.
+
+*Open:* no fix. Time-weighting the senior target, closing deposits earlier than
+settlement, or a minimum holding period are each a spec or design change. Filed
+as issue #32; measured in `tests/src/settlement_ordering.rs` and
+[analysis/settlement-ordering.md](analysis/settlement-ordering.md).
+
+That analysis also covers settlement timing and claim order: settlement pays its
+caller nothing, and settling thirty days late moves only the junior (+4 931 at
++10%/yr, −4 931 at −10%/yr; the senior is unchanged at 220 000). Claim order
+decides one stroop of remainder and nothing else. The vector this design does
+not bound is `V` itself: a vault whose price can be moved in the settlement
+ledger lets whoever moves it choose the valuation (R6, B1, B2). For the mock
+vault the only mover is the admin (R10), and a final-ledger rate change is worth
+one stroop of truncation.
+
 ---
 
 ## The underlying vault
@@ -484,9 +517,9 @@ than dismissed:
 - Gas and resource limits on mainnet. Tests enforce mainnet resource limits by
   default from SDK v25, and nothing currently fails, but a worst-case
   `settle` with many depositors has not been measured.
-- Front-running settlement. Anyone can call it, and the result depends on the
-  vault's valuation at that moment. A vault whose price can be moved in the
-  same block makes this a real vector.
+- `V` manipulation at the settlement ledger for a vault with a real, movable
+  price. The ordering half is analysed in R19; the market half needs a real
+  pool and is tracked under B1 and B2.
 - Formal verification of the `mul_div` rounding direction against the
   last-claim remainder, beyond the property tests.
 - The economics of `MAX_SENIOR_RATIO_BPS` against realistic vault volatility.
